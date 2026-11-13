@@ -1,0 +1,58 @@
+name: Frontend checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [mingma-lab, mingma-mvp, mingma-3d]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run domain tests
+        if: matrix.project != 'mingma-3d'
+        run: npm test
+      - name: Check types and build
+        run: npm run build
+      - name: Package design lab preview
+        if: matrix.project == 'mingma-lab'
+        run: python3 scripts/package-delivery.py
+      - name: Upload runnable preview package
+        if: matrix.project == 'mingma-lab'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mingma-preview-${{ github.sha }}
+          path: |
+            delivery/mingma-frontends-preview.zip
+            delivery/mingma-frontends-source.zip
+            delivery/manifest.json
+          if-no-files-found: error
+          retention-days: 14

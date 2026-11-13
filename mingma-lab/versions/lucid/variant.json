@@ -1,0 +1,21 @@
+{
+  "id": "lucid",
+  "base": "mingma-mvp",
+  "storageIsolated": true,
+  "name": "澄境 Lucid",
+  "positioning": "通透玻璃空间工作室",
+  "accent": "#28699f",
+  "pages": [
+    "overview",
+    "clarify",
+    "requirements",
+    "dimensions",
+    "compare",
+    "vendor",
+    "space",
+    "records"
+  ],
+  "asset": "/assets/lucid.webp",
+  "navigation": "top workspace tabs",
+  "status": "implemented and locally verified"
+}

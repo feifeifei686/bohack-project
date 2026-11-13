@@ -1,0 +1,24 @@
+{
+  "name": "mingma-mvp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --experimental-strip-types --test src/domain.test.ts",
+    "format": "prettier --write src/main.ts src/style.css src/workspace-glass.css src/glass-model.ts index.html vite.config.ts"
+  },
+  "dependencies": {
+    "three": "^0.183.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/three": "^0.183.0",
+    "prettier": "^3.10.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0"
+  }
+}

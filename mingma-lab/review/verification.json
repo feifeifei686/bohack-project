@@ -1,0 +1,43 @@
+{
+  "verified_at": "2026-11-14T04:11:09+08:00",
+  "timezone": "Asia/Shanghai",
+  "versions": [
+    "atmosphere",
+    "lucid",
+    "atelier"
+  ],
+  "per_version": {
+    "domain_tests": 14,
+    "browser_workflow_assertions": 14,
+    "space_assertions": 10,
+    "edge_assertions": 15,
+    "mobile_routes_without_overflow": 8
+  },
+  "domain_tests_total": 42,
+  "browser_assertions_total": 117,
+  "gallery_assertions": 10,
+  "extracted_preview_package": {
+    "zip_crc_passed": true,
+    "extracted_files_match_archive": true,
+    "served_at": "http://127.0.0.1:5191/",
+    "all_three_versions_tested": true,
+    "fonts_and_images_local": true
+  },
+  "extra_features": [
+    "Atmosphere note enters clarification without overwriting published versions",
+    "Lucid linked kitchen requirement opens and closes from home drawer"
+  ],
+  "visual_review": {
+    "atmosphere": "ship",
+    "lucid": "ship",
+    "atelier": "ship",
+    "gallery": "ship",
+    "scope": "Independent screenshot review of desktop/mobile overview, desktop comparison, and complete gallery sections; interaction verification performed separately"
+  },
+  "limitations": [
+    "Browser-local data and rule-based guidance",
+    "No real LLM, merchant authentication or cloud backend",
+    "Demonstration layouts and routes, not construction drawings",
+    "No price analysis"
+  ]
+}

@@ -1,0 +1,44 @@
+flowchart TD
+  root["以用户确认的需求文档为基准<br/>让需求可表达、方案可审查、施工内容可理解"]
+  area["第一层 · 区域层"]
+  work["第二层 · 项目层"]
+  decision["第三层 · 具体决策"]
+  global["全局性硬装规划<br/>生活习惯、改造目的、居住情况<br/>全屋必须满足的要求与保留项<br/>跨房间的需求同步到相关区域"]
+  space["区域性硬装入口<br/>通过 3D 户型选择区域<br/>客厅 / 卧室 / 厨房 / 卫生间 / 玄关<br/>点选房间，查看需求和施工项目"]
+  link["空间与项目关联<br/>每个区域进入对应工程分类<br/>全局需求与局部需求合并、查冲突<br/>全局与区域共用第三层决策流程"]
+  visual["3D 表达（补充建议）<br/>定位施工范围、点位和示意线路<br/>点击项目，高亮对应空间<br/>标明已确认、示意与待实测信息"]
+  demolition["拆改工程<br/>拆墙、砌墙、铲墙皮<br/>门窗洞口修整等"]
+  utilities["水电与设备管线<br/>强弱电、开关插座底盒、给排水<br/>燃气改造（需资质）、地暖 / 暖气<br/>中央空调 / 新风管线"]
+  waterproof["防水工程<br/>厨卫、阳台防水与闭水试验"]
+  masonry["泥瓦工程<br/>墙地砖铺贴、地面找平、过门石<br/>窗台石、包立管、砌筑等"]
+  carpentry["木工工程<br/>吊顶、石膏线、隔墙、背景墙基层<br/>门套窗套基层、窗帘盒等"]
+  painting["油漆工程<br/>墙面腻子、乳胶漆、木器漆<br/>壁纸基层等"]
+  installation["安装工程<br/>门窗、地板、踢脚线、橱柜、定制柜<br/>卫浴洁具、五金、灯具、开关插座<br/>热水器等"]
+  fixed["其他固定项目<br/>楼梯、护栏、阳光房等"]
+  clarify["理解与澄清需求<br/>生活化表达 → 对话 → 选择题<br/>识别需确认的维度与常见遗漏"]
+  baseline["形成需求基准（补充确认）<br/>必须满足 / 偏好 / 待现场确认<br/>用户审核后保存需求文档版本"]
+  vendor["商家制作并上传方案<br/>逐项回应需求，提供材料和工艺<br/>关联房间、施工项目与说明依据"]
+  audit["AI 对照审查<br/>需求遗漏、冲突、范围重复<br/>新增项目是否必要、信息是否充分"]
+  revise["反馈与方案修订<br/>商家修改 / 补充说明 / 待勘测<br/>用户决策后重新审查新版方案"]
+  understand["解释方案与用户确认<br/>专业术语、材料差异通俗解释<br/>3D 定位与效果表达，用户确认"]
+  root --> area
+  root --> work
+  root --> decision
+  area --> global
+  area --> space
+  area --> link
+  area --> visual
+  work --> demolition
+  work --> utilities
+  work --> waterproof
+  work --> masonry
+  work --> carpentry
+  work --> painting
+  work --> installation
+  work --> fixed
+  decision --> clarify
+  decision --> baseline
+  decision --> vendor
+  decision --> audit
+  decision --> revise
+  decision --> understand

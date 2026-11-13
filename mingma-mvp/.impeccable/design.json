@@ -1,0 +1,42 @@
+{
+  "name": "Mingma optical glass",
+  "mode": "operate",
+  "palette": {
+    "background": "#f2f5fa",
+    "panel": "rgba(255,255,255,0.54)",
+    "text": "#243347",
+    "muted": "#5d6e82",
+    "line": "rgba(98,126,151,0.18)",
+    "accent": "#2866b2",
+    "secondary": "#647d98"
+  },
+  "typography": {
+    "body": "PingFang SC, Microsoft YaHei, sans-serif",
+    "data": "system sans-serif",
+    "bodyPx": 14,
+    "heroPx": [
+      43,
+      82
+    ]
+  },
+  "layout": {
+    "mobileFirst": true,
+    "navigation": "floating bottom dock",
+    "centerpiece": "interactive pastel axonometric house",
+    "breakpointsPx": [
+      640,
+      1000,
+      1350
+    ]
+  },
+  "materials": {
+    "backdropBlurPx": [
+      22,
+      30
+    ],
+    "whiteRimPx": 1,
+    "surface": "translucent frosted optical glass",
+    "motion": "subtle native CSS",
+    "reducedTransparencyFallback": true
+  }
+}

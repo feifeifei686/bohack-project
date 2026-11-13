@@ -1,0 +1,5 @@
+{
+  "id": "atelier",
+  "base": "mingma-mvp",
+  "storageIsolated": true
+}

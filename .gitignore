@@ -1,0 +1,27 @@
+# Dependencies and generated builds
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+/delivery/
+
+# Local browser sessions, verification captures and editor files
+.gstack/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+**/review/
+!mingma-lab/review/
+mingma-lab/review/*
+!mingma-lab/review/verification.json
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+__pycache__/
+*.pyc

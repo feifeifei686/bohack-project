@@ -1,0 +1,55 @@
+{
+  "generation_method": "built-in image_gen",
+  "visual_reference": "User-supplied visual reference; natural photographic light, smoky and frosted glass, layered composition. Reference used as style inspiration only.",
+  "intended_use": "Three Mingma frontend design variants",
+  "assets": [
+    {
+      "id": "atmosphere",
+      "file": "atmosphere.webp",
+      "original": "originals/atmosphere.png",
+      "promptFile": "atmosphere.prompt.txt",
+      "width": 1536,
+      "height": 1024,
+      "composition": "Dark olive negative space on the left; warm window, chair and foliage on the right.",
+      "prompt": "Use case: photorealistic-natural.\nAsset type: premium home-renovation web application background, wide 3:2 landscape, high resolution.\nCreate an original editorial interior photograph with a quiet cinematic natural atmosphere: a refined living-room corner in late afternoon, warm linen curtains, dark walnut joinery, an understated sculptural lounge chair, an olive branch and soft botanical shadows. A translucent smoky glass edge in the very near foreground gently refracts one area of the scene. Rich physical materials, natural optical depth, subtle grain, believable architectural photography, calm olive green, warm cream, tobacco brown and charcoal palette. The left 45 percent should be gently dark, calm, and spacious enough for an application headline in white; the clearer room, window, and chair live in the right half. Sunlight travels diagonally through the scene, with leafy soft-focus shapes and a graceful transition between deep shadow and creamy light. The atmosphere should feel intimate, contemporary and expensive without looking like a luxury hotel advert. No people, no text, no letters, no logos, no watermark, no UI, no border, no phone mockup, no graphic gradients, no excessive decoration. One continuous photographic image, not a collage.",
+      "bytes": 214190,
+      "sha256": "ca510a8b3b356fb68d0f57fab75b3e92953432a2398a1d13ceffad34f0f5cfa4"
+    },
+    {
+      "id": "lucid",
+      "file": "lucid.webp",
+      "original": "originals/lucid.png",
+      "promptFile": "lucid.prompt.txt",
+      "width": 1536,
+      "height": 1024,
+      "composition": "Bright ivory room with empty plaster wall on the left and softly refracting frosted glass on the right.",
+      "prompt": "Original wide 3:2 architectural photograph for a luminous home design website. A serene ivory living room in soft morning daylight, with gauzy curtains, pale limestone floor and a low white linen lounge chair on the right. In the right foreground, one curved frosted-glass panel transmits the light and softly blurs the room behind it; a delicate clear glass rim bends pale blue light naturally. The left half is open, calm, off-white space suitable for dark website typography. High-end editorial interior photography with tactile plaster, linen, and real optical glass, very subtle cream and icy blue tones, graceful shadows and no plastic shine. Single continuous photographic scene. No people, no text, no logos, no watermark, no UI, no device mockup.",
+      "bytes": 134186,
+      "sha256": "279bd80ea2f6960497e0b41e70dec309a5ab8e9a162c66d5164c67ab13eb5095"
+    },
+    {
+      "id": "atelier",
+      "file": "atelier.webp",
+      "original": "originals/atelier.png",
+      "promptFile": "atelier.prompt.txt",
+      "width": 1536,
+      "height": 1024,
+      "composition": "Travertine kitchen island, pale oak cabinets, warm daylight; upper-left negative space.",
+      "prompt": "Use case: photorealistic-natural.\nAsset type: architectural editorial photograph for a home-renovation design studio website, wide 3:2 landscape.\nCreate an original quiet contemporary kitchen interior photographed with architectural precision. A pale travertine island with believable soft pores and thin horizontal edges, light natural oak cabinet fronts, warm off-white microcement walls, a discreet dark bronze faucet and a single ceramic bowl. Tall daylight enters from one side, producing soft long shadows and a restrained sculptural composition. The scene should feel lived-in but meticulously edited, with real scale, fine material detail, subtle analog texture and gentle lens perspective. Neutral cream, sandstone, oak and charcoal palette, understated and calm. Leave balanced architectural negative space in the upper left while the island and cabinetry occupy the center and lower right. A beautifully composed design-magazine photograph, not a real-estate listing, not a glossy render. No people, no plants obscuring the kitchen, no text, labels, logos, watermark, border, mockup, or user interface. Single continuous photograph.",
+      "bytes": 151354,
+      "sha256": "c137b29ede933f5bc2320b40f4165f2419926d74aed8a5b8f433182652130dbe"
+    }
+  ],
+  "processing": {
+    "operation": "Lossy WebP encoding without crop or resizing",
+    "encoder": "cwebp",
+    "quality": 88,
+    "method": 6,
+    "originalsRetained": true
+  },
+  "checks": [
+    "No text, logos, UI, watermark or people visible",
+    "Each original and WebP has a 1536x1024 landscape composition",
+    "Visual subjects and cropping inspected"
+  ]
+}
