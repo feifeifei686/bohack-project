@@ -15,8 +15,11 @@ import {
 type Options = {
   variant: 'atmosphere' | 'lucid' | 'atelier'
   questionnaire?: boolean
+  externalNavigation?: boolean
+  onNavigationChange?: () => void
   initialBrief: string
   storage?: Pick<Storage, 'getItem' | 'setItem'>
+  storageStatus?: () => string
   existingCount: number
   projectContext?: IntakeProjectContextEntry[]
   planningArea?: string | null
@@ -25,6 +28,22 @@ type Options = {
   onFirstExpression?: () => void
   onAdopt: (requirements: IntakeLegacyRequirement[], document: IntakeDocument) => void
   onNotice?: (message: string) => void
+}
+export type IntakeNavigation = {
+  title: string
+  description: string
+  nextLabel: string
+  busy: boolean
+  backAvailable: boolean
+}
+export type IntakeNavigationIssue = { target?: HTMLElement; message?: string }
+export type IntakeSession = {
+  dispose: () => void
+  focusExpression: () => void
+  refreshSaveState: () => void
+  navigation: () => IntakeNavigation
+  advance: () => Promise<IntakeNavigationIssue | void>
+  previous: () => boolean
 }
 type Filter = 'all' | IntakeScope | 'pending'
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
@@ -42,9 +61,9 @@ const icon = (name: 'arrow' | 'check' | 'spark' | 'download' | 'edit') => `<svg 
   edit: '<path d="m15 4 5 5M4 20l4-1L20 7a2 2 0 0 0-3-3L5 16l-1 4Z"/>',
 }[name]}</svg>`
 
-export function mountIntake(container: HTMLElement, options: Options): { dispose: () => void; focusExpression: () => void } {
+export function mountIntake(container: HTMLElement, options: Options): IntakeSession {
   const key = `mingma-${options.variant}-intake-v2`
-  const savedMessage = options.storage ? '仅保留本轮演示' : '已保存在此浏览器'
+  const savedMessage = () => options.storageStatus?.() ?? (options.storage ? '仅保留本轮演示' : '已保存在此浏览器')
   let state = newIntakeState(options.initialBrief)
   let rawStored = ''
   let storageBlocked = false
@@ -63,12 +82,24 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
     state = synced
   }
   const planningArea = options.planningArea
+  const expressionExample = () => {
+    const area = state.areas.length === 1 ? state.areas[0] : state.areas.length > 1 ? '' : planningArea || ''
+    if (/卫生间|卫浴|浴室|厕所/.test(area)) return '卫生间地面想更防滑、好清理，洗澡时希望水不要溅到洗手台；现有浴室柜想保留。防水和排水条件我不清楚，希望先检查。'
+    if (/厨房|厨/.test(area)) return '厨房想好打理，洗碗机要有；尽量保留现在的水槽和冰箱位置，不想做开放展示格。水电和安装尺寸希望先检查。'
+    if (/卧室|主卧|次卧|儿童房|老人房/.test(area)) return `${area}想安静一些，睡前能在床边开关灯；衣服收纳不够，希望增加封闭收纳。现有家具哪些能保留，想一起确认。`
+    if (/客厅|起居/.test(area)) return '客厅希望通道宽敞一些，日常杂物有地方收起来；地面想好打理，和走道看着连贯。电视和插座的位置希望先确认。'
+    if (/玄关|门厅|入户/.test(area)) return '进门想有地方放鞋、挂外套和放钥匙，最好能坐着换鞋；希望保留顺畅的通道，柜子尺寸需要现场量一下。'
+    if (/走道|走廊|过道/.test(area)) return '走道希望明亮、好打理，夜间经过时能方便开灯；地面和相邻房间看着连贯，尽量不占用通行空间。'
+    if (/阳台/.test(area)) return '阳台想兼顾晾衣和收纳，地面要好清理；现有窗户想保留，洗衣机能否放置需要先确认排水和电源条件。'
+    return area ? `${area}现在最不方便的是……，这次想改善……，一定想保留的是……。专业条件我不清楚，希望先检查。` : '厨房想好打理，洗碗机要有；客厅和公共走道的地面想看着连贯。水电我不懂，希望先检查。'
+  }
   const areaAdded = !storageBlocked && !!planningArea && !state.areas.includes(planningArea) && state.areas.length < 12
   if (!storageBlocked && planningArea !== undefined) {
     state.stage = 'express'
     if (areaAdded) state.areas = [planningArea, ...state.areas]
   }
   let disposed = false
+  let navigationScheduled = false
   let busy = false
   let retryAttempt = 0
   let requestFeedback: 'error' | 'cancelled' | null = null
@@ -83,6 +114,17 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
   let reviewSummary = false
   let activeQuestionId = ''
   let furthestStage = state.stage === 'draft' || state.reviewedIds.length ? 2 : state.result ? 1 : 0
+  if (rawStored && !contextSynchronized && planningArea === undefined) {
+    try {
+      const cursor = JSON.parse(rawStored).questionnaireCursor
+      if (cursor && Number.isInteger(cursor.reviewIndex) && cursor.reviewIndex >= 0 && cursor.reviewIndex < (state.result?.items.length || 1)) {
+        reviewIndex = cursor.reviewIndex
+        reviewSummary = cursor.reviewSummary === true && state.stage === 'draft'
+        if (typeof cursor.activeQuestionId === 'string') activeQuestionId = cursor.activeQuestionId
+        if (Number.isInteger(cursor.furthestStage)) furthestStage = Math.max(furthestStage, Math.min(3, cursor.furthestStage))
+      }
+    } catch { /* Existing state validation handles malformed drafts. */ }
+  }
   const currentQuestion = () => state.result?.questions.find(question => question.id === activeQuestionId) ?? pendingQuestions(state)[0]
   let filter: Filter = 'all'
   let areaCustom = ''
@@ -95,13 +137,28 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
   container.classList.add('intake-root')
   container.dataset.variant = options.variant
   container.classList.toggle('intake-questionnaire', guided)
+  container.classList.toggle('intake-external-navigation', !!options.externalNavigation)
+
+  function navigationChanged() {
+    if (disposed || navigationScheduled || !options.onNavigationChange) return
+    navigationScheduled = true
+    queueMicrotask(() => {
+      navigationScheduled = false
+      if (!disposed) options.onNavigationChange?.()
+    })
+  }
 
   function persist() {
     if (storageBlocked) return
-    try { (options.storage ?? localStorage).setItem(key, JSON.stringify(state)); storageError = '' }
+    try { (options.storage ?? localStorage).setItem(key, JSON.stringify({ ...state, questionnaireCursor: { reviewIndex, reviewSummary, activeQuestionId, furthestStage } })); storageError = '' }
     catch { storageError = '浏览器暂时无法保存，请导出需求文档留存。当前内容仍在页面中。' }
+    refreshSaveState()
+    navigationChanged()
+  }
+  function refreshSaveState() {
+    if (disposed) return
     const saved = container.querySelector('[data-intake-save-state]')
-    if (saved) saved.textContent = storageError || savedMessage
+    if (saved) saved.textContent = storageError || savedMessage()
   }
   function invalidateFlight() {
     gate.invalidate()
@@ -162,14 +219,15 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
   }
   function introduction() {
     const choices = [...new Set([...areaChoices, ...state.areas])]
+    const areaField = `<fieldset class="intake-area-field"><legend>这次涉及哪些区域？<span>可多选，也可以暂不确定</span></legend><div class="intake-chips">${choices.map(area => `<label class="intake-chip"><input type="checkbox" data-intake-area="${esc(area)}" ${state.areas.includes(area) ? 'checked' : ''} ${busy ? 'disabled' : ''}/><span>${esc(area)}</span></label>`).join('')}</div><div class="intake-custom-area"><label class="intake-sr" for="intake-area-custom">补充自定义区域</label><input id="intake-area-custom" data-intake-field="area-custom" maxlength="40" placeholder="补充区域，如儿童房" value="${esc(areaCustom)}" ${busy ? 'disabled' : ''}/>${button('添加区域', 'add-area', 'secondary', '', busy)}</div></fieldset>`
     return `<div class="intake-layout">
       <section class="intake-panel intake-expression" aria-labelledby="intake-expression-title">
         <div class="intake-section-heading"><h2 id="intake-expression-title">先说说，你想怎样生活。</h2><p>想改哪些地方，现在最不方便的是什么？有什么一定想保留？不用先懂施工术语。</p></div>
-        <label class="intake-label" for="intake-brief">你的生活化需求</label>
-        <textarea id="intake-brief" data-intake-field="brief" maxlength="4000" rows="7" placeholder="例如：厨房想好打理，洗碗机要有；客厅和走道地面想看着连贯。水电我不懂，希望先检查。" ${busy ? 'disabled' : ''}>${esc(state.brief)}</textarea>
+        ${guided ? `<div class="intake-expression-tools"><label class="intake-label" for="intake-brief">你的生活化需求</label>${button('使用这个表达示例', 'sample', 'text', '', busy)}</div>` : '<label class="intake-label" for="intake-brief">你的生活化需求</label>'}
+        <textarea id="intake-brief" data-intake-field="brief" maxlength="4000" rows="${guided ? 4 : 7}" placeholder="例如：${esc(expressionExample())}" ${busy ? 'disabled' : ''}>${esc(state.brief)}</textarea>
         <div class="intake-input-meta"><span>可以先说重点，细节稍后一起补齐。</span><span data-intake-brief-count>${state.brief.length} / 4000</span></div>
-        ${button('使用这个表达示例', 'sample', 'text', '', busy)}
-        <fieldset class="intake-area-field"><legend>这次涉及哪些区域？<span>可多选，也可以暂不确定</span></legend><div class="intake-chips">${choices.map(area => `<label class="intake-chip"><input type="checkbox" data-intake-area="${esc(area)}" ${state.areas.includes(area) ? 'checked' : ''} ${busy ? 'disabled' : ''}/><span>${esc(area)}</span></label>`).join('')}</div><div class="intake-custom-area"><label class="intake-sr" for="intake-area-custom">补充自定义区域</label><input id="intake-area-custom" data-intake-field="area-custom" maxlength="40" placeholder="补充区域，如儿童房" value="${esc(areaCustom)}" ${busy ? 'disabled' : ''}/>${button('添加区域', 'add-area', 'secondary', '', busy)}</div></fieldset>
+        ${guided ? '' : button('使用这个表达示例', 'sample', 'text', '', busy)}
+        ${guided && state.areas.length ? `<details class="intake-area-disclosure"><summary>涉及区域：${esc(state.areas.join('、') || '暂不确定')}<span>调整范围</span></summary>${areaField}</details>` : areaField}
         <div class="intake-action-row"><span>AI 会先复述理解，再提出有针对性的问题。</span>${button(`${guided ? '下一步：补充细节' : '开始梳理'} ${icon('arrow')}`, 'start', 'primary', '', busy || storageBlocked)}</div>
         ${state.result && (!guided || furthestStage >= 2) ? button('返回已有需求草稿', 'show-draft', 'text', '', busy) : ''}
       </section>
@@ -252,7 +310,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
   function questionnaireProgress() {
     const step = state.stage === 'express' ? 0 : state.stage === 'refine' ? 1 : reviewSummary ? 3 : 2
     const labels = ['表达想法', '补充细节', '逐条确认', '提交问卷']
-    return `<div class="questionnaire-progress"><div><strong>需求问卷</strong><span>第 ${step + 1} / 4 步</span></div><progress value="${step}" max="4" aria-label="需求问卷进度"></progress><nav aria-label="问卷步骤">${labels.map((label, index) => `<button type="button" data-intake-action="wizard-stage" data-intake-id="${index}" ${busy || index > furthestStage ? 'disabled' : ''} ${step === index ? 'aria-current="step"' : ''}><span>${index + 1}</span>${label}</button>`).join('')}</nav></div>`
+    return `<div class="questionnaire-progress"><div><strong>需求问卷 <small class="intake-save-state" data-intake-save-state>${esc(storageError || savedMessage())}</small></strong><span>第 ${step + 1} / 4 步</span></div><progress value="${step}" max="4" aria-label="需求问卷进度"></progress><nav aria-label="问卷步骤">${labels.map((label, index) => `<button type="button" data-intake-action="wizard-stage" data-intake-id="${index}" ${busy || index > furthestStage ? 'disabled' : ''} ${step === index ? 'aria-current="step"' : ''}><span>${index + 1}</span>${label}</button>`).join('')}</nav></div>`
   }
   function questionnaireDraft() {
     const items = state.result!.items
@@ -305,7 +363,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
     const focused = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
     const focusedId = focused && container.contains(focused) ? focused.id : ''
     const selection = focused && ('selectionStart' in focused) ? focused.selectionStart : null
-    container.innerHTML = `${guided ? questionnaireProgress() : `<div class="intake-topline"><nav class="intake-steps" aria-label="需求获取步骤">${([['express', '表达想法'], ['refine', '梳理细节'], ['draft', '确认草稿']] as const).map(([stage, text], index) => `<button type="button" data-intake-stage="${stage}" class="${state.stage === stage ? 'is-current' : ''}" ${stage !== 'express' && !state.result ? 'disabled' : ''} ${state.stage === stage ? 'aria-current="step"' : ''}><span>${index + 1}</span>${text}</button>`).join('')}</nav><span class="intake-save-state" data-intake-save-state>${storageError ? '当前内容尚未保存' : savedMessage}</span></div>`}
+    container.innerHTML = `${guided ? questionnaireProgress() : `<div class="intake-topline"><nav class="intake-steps" aria-label="需求获取步骤">${([['express', '表达想法'], ['refine', '梳理细节'], ['draft', '确认草稿']] as const).map(([stage, text], index) => `<button type="button" data-intake-stage="${stage}" class="${state.stage === stage ? 'is-current' : ''}" ${stage !== 'express' && !state.result ? 'disabled' : ''} ${state.stage === stage ? 'aria-current="step"' : ''}><span>${index + 1}</span>${text}</button>`).join('')}</nav><span class="intake-save-state" data-intake-save-state>${esc(storageError ? '当前内容尚未保存' : savedMessage())}</span></div>`}
       ${planningArea !== undefined ? `<div class="intake-notice intake-planning-context"><strong>${planningArea ? `当前规划 · ${esc(planningArea)}` : '全屋硬装规划'}</strong><a href="#planning">返回空间选择</a></div>` : ''}
       ${statusMarkup()}${projectContextMarkup()}
       ${state.stage === 'express' || !state.result ? introduction() : state.stage === 'refine' ? conversation(question) : guided ? questionnaireDraft() : draft()}
@@ -323,6 +381,136 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
         if (selection !== null && (next instanceof HTMLTextAreaElement || next instanceof HTMLInputElement)) next.setSelectionRange(selection, selection)
       }
     }
+    persist()
+    navigationChanged()
+  }
+  function navigation(): IntakeNavigation {
+    const base = { busy, backAvailable: state.stage !== 'express' && !!state.result }
+    if (busy) return { ...base, title: '正在整理你的回答', description: '内容已保留，整理完成后继续。需要修改时可以取消整理。', nextLabel: '正在整理…' }
+    if (storageBlocked) return { ...base, title: '先恢复原来的访谈', description: '原记录无法读取，先导出原始记录，再决定是否开始新访谈。', nextLabel: '下一步' }
+    if (requestFeedback === 'error') return { ...base, title: '重新整理这一轮回答', description: '输入和已有草稿均已保留，点击后重新尝试。', nextLabel: '重新整理' }
+    if (!state.result || state.stage === 'express') return { ...base, title: '说说你想改什么', description: '写下生活中的不方便，再确认本次涉及的区域。', nextLabel: '下一步' }
+    if (state.stage === 'refine') {
+      const question = currentQuestion()
+      return { ...base, title: question ? '补充这一个问题' : '准备查看需求草稿', description: question ? '选择符合情况的回答，也可以自己补充；不清楚时可选“暂不确定”。' : '逐条检查 AI 整理出的需求，确认是否符合你的想法。', nextLabel: !question && state.needsAnalysis ? '整理草稿，下一步' : '下一步' }
+    }
+    if (state.needsAnalysis) return { ...base, title: '先整理最新的修改', description: '你更新了表达或回答，需要整理后再逐条确认。', nextLabel: '更新草稿，下一步' }
+    if (reviewSummary || !guided) return { ...base, title: '确认这份需求清单', description: '检查纳入内容；提交问卷只更新草稿，正式发布仍由你确认。', nextLabel: '提交问卷，下一步' }
+    const item = state.result.items[reviewIndex]
+    const resolution = container.querySelector<HTMLFormElement>('[data-intake-form="resolve"]')
+    if (resolution && !resolution.hidden) return { ...base, title: '补充这条需求的决定', description: '写下你的取舍后，AI 会更新草稿，再由你确认。', nextLabel: '保存回答，下一步' }
+    return { ...base, title: `确认第 ${reviewIndex + 1} 条需求`, description: item?.origin === 'suggestion' ? '这是一条 AI 建议；点击下一步表示采纳并确认，也可以暂不纳入。' : '核对描述和重要程度；现场测量等未知条件可以保留。', nextLabel: item?.origin === 'suggestion' ? '采纳建议，下一步' : '确认本条，下一步' }
+  }
+  function guideIssue(selector: string, message: string): IntakeNavigationIssue {
+    const target = container.querySelector<HTMLElement>(selector) || container
+    for (let parent: HTMLElement | null = target; parent && parent !== container; parent = parent.parentElement) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true
+    }
+    return { target, message }
+  }
+  function showItemIssue(item: IntakeItem, message: string): IntakeNavigationIssue {
+    if (state.stage !== 'draft' || reviewSummary || state.result?.items[reviewIndex]?.id !== item.id) {
+      state.stage = 'draft'; reviewSummary = false; filter = 'all'
+      reviewIndex = Math.max(0, state.result?.items.findIndex(candidate => candidate.id === item.id) ?? 0)
+      furthestStage = Math.max(furthestStage, 2)
+      persist(); render()
+    }
+    const field = (name: string) => `#intake-edit-${name}-${CSS.escape(item.id)}`
+    if (['undecided', 'excluded'].includes(item.necessity)) return guideIssue(field('necessity'), message)
+    for (const name of ['title', 'description', 'category', 'component'] as const) {
+      if (!item[name].trim()) return guideIssue(field(name), message)
+    }
+    if (['area', 'shared'].includes(item.scope) && !item.areas.length) return guideIssue(field('areas'), message)
+    if (item.necessity === 'must' && item.scope === 'unassigned') return guideIssue(field('scope'), message)
+    if (item.necessity === 'must' && item.pending.some(pending => pending.blocking && ['user', 'unassigned'].includes(pending.owner))) {
+      const form = container.querySelector<HTMLFormElement>('[data-intake-form="resolve"]')
+      if (form) { form.hidden = false; navigationChanged(); return guideIssue('#intake-owner-answer', message) }
+    }
+    const conflicted = state.result?.conflicts.some(conflict => conflict.itemIds.includes(item.id) && item.necessity === 'must')
+    return guideIssue(conflicted ? field('necessity') : `[data-intake-item="${CSS.escape(item.id)}"]`, message)
+  }
+  async function analyzeFromNavigation(mode: 'refine' | 'draft'): Promise<IntakeNavigationIssue | void> {
+    if (!state.brief.trim()) {
+      if (state.stage !== 'express') chooseStage('express')
+      return guideIssue('#intake-brief', '先写一句你想改善的地方，再点下一步。')
+    }
+    const incomplete = state.result?.items.find(item => !item.title.trim() || !item.description.trim() || !item.category.trim() || !item.component.trim())
+    if (incomplete) return showItemIssue(incomplete, '请补全这条需求的名称、描述、工程和构件，再继续整理。')
+    await analyze(mode)
+    if (requestFeedback === 'error') return guideIssue('[data-intake-request-status]', error || '这轮整理没有完成，原内容已保留，可以重试。')
+  }
+  async function advance(): Promise<IntakeNavigationIssue | void> {
+    if (disposed) return
+    if (busy) return guideIssue('[data-intake-request-status]', 'AI 正在整理，完成后会显示下一步；需要修改时可以先取消整理。')
+    if (storageBlocked) return guideIssue('.intake-notice--warning', storageError)
+    if (requestFeedback === 'error') return analyzeFromNavigation(lastMode)
+    if (!state.result || state.stage === 'express') {
+      if (!state.brief.trim()) return guideIssue('#intake-brief', '先写一句你想改善的地方，再点下一步。')
+      return analyzeFromNavigation('refine')
+    }
+    if (state.stage === 'refine') {
+      const question = currentQuestion()
+      if (!question) {
+        if (state.needsAnalysis) return analyzeFromNavigation('draft')
+        chooseStage('draft'); return
+      }
+      if (!state.reply.selected.length && !state.reply.free.trim()) return guideIssue('.intake-options', '先选一个回答，或在下面写下补充；不清楚时可以选择“暂不确定”。')
+      await submitAnswer()
+      if (error) return guideIssue(container.querySelector('[data-intake-request-status="error"]') ? '[data-intake-request-status]' : '.intake-question', error)
+      return
+    }
+    if (state.needsAnalysis) return analyzeFromNavigation('draft')
+    if (!reviewSummary && guided) {
+      const item = state.result.items[reviewIndex]
+      if (!item) { chooseStage('express'); return guideIssue('#intake-brief', '先补充你的想法，再整理可以确认的需求。') }
+      const resolution = container.querySelector<HTMLFormElement>('[data-intake-form="resolve"]')
+      if (resolution && !resolution.hidden) {
+        if (!resolution.querySelector<HTMLTextAreaElement>('textarea')?.value.trim()) return guideIssue('#intake-owner-answer', '请写下你的决定，或选择“暂不纳入”保留这条待办。')
+        await submitResolution(resolution)
+        if (error) return guideIssue(container.querySelector('[data-intake-request-status="error"]') ? '[data-intake-request-status]' : '#intake-owner-answer', error)
+        return
+      }
+      const issues = questionnaireItemIssues(state, item)
+      if (issues.length) return showItemIssue(item, issues[0])
+      state = confirmQuestionnaireItem(state, item.id)
+      moveReview(reviewIndex + 1)
+      return
+    }
+    const issues = adoptionIssues(state, options.existingCount)
+    if (issues.length) {
+      const included = includedItems(state)
+      const invalid = included.find(item => questionnaireItemIssues(state, item).length > 0)
+      if (invalid) return showItemIssue(invalid, questionnaireItemIssues(state, invalid)[0])
+      const unreviewed = included.find(item => !state.reviewedIds.includes(item.id))
+      if (unreviewed) return showItemIssue(unreviewed, '请先核对这条需求；确认后再提交整份问卷。')
+      if (!included.length) {
+        const item = state.result.items.find(item => item.necessity !== 'excluded') ?? state.result.items[0]
+        if (item) return showItemIssue(item, '至少确认一条希望纳入本次改造的需求。')
+      }
+      if (options.existingCount > 0 && !state.replaceAcknowledged) return guideIssue('[data-intake-field="replace"]', '请勾选确认用本次问卷更新当前草稿，已发布版本会保留。')
+      return guideIssue('.questionnaire-resolution, .intake-adopt-issues', issues[0])
+    }
+    const payload = adoptionPayload(state, options.existingCount)
+    persist()
+    options.onAdopt(payload.requirements, payload.document)
+  }
+  function previous(): boolean {
+    if (disposed) return false
+    if (busy) invalidateFlight()
+    if (!state.result || state.stage === 'express') return false
+    if (state.stage === 'draft') {
+      if (reviewSummary) moveReview(Math.max(0, state.result.items.length - 1))
+      else if (reviewIndex > 0) moveReview(reviewIndex - 1)
+      else chooseStage('refine')
+      return true
+    }
+    const batch = state.result.questions
+    const index = batch.findIndex(question => question.id === currentQuestion()?.id)
+    if (index > 0) {
+      activeQuestionId = batch[index - 1].id; state.reply.questionId = ''
+      render(); locate(container.querySelector<HTMLElement>('.intake-question h3'), container)
+    } else chooseStage('express')
+    return true
   }
   async function analyze(mode: 'refine' | 'draft' = 'refine') {
     if (busy || disposed || storageBlocked) return
@@ -460,6 +648,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
         const form = container.querySelector<HTMLFormElement>('[data-intake-form="resolve"]')
         if (form) { form.hidden = false; locate(form.querySelector('textarea'), form) }
         else { const editor = container.querySelector<HTMLDetailsElement>('.intake-editor'); if (editor) { editor.open = true; locate(editor) } }
+        navigationChanged()
         break
       }
       case 'start': case 'analyze': case 'continue': await analyze('refine'); break
@@ -474,8 +663,9 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
       case 'dismiss-request':
         requestFeedback = null
         container.querySelector('.intake-request-dock')?.remove()
+        navigationChanged()
         break
-      case 'sample': state.brief = '厨房想好打理，洗碗机要有；客厅和公共走道的地面想看着连贯。水电我不懂，希望先检查。'; contextChanged(); render(); break
+      case 'sample': state.brief = expressionExample(); contextChanged(); render(); break
       case 'add-area': addArea(); break
       case 'edit-brief': chooseStage('express'); break
       case 'show-draft': chooseStage('draft'); break
@@ -567,6 +757,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
       case 'area-custom': areaCustom = input.value; break
       case 'free-answer': state.reply.free = input.value; persist(); break
     }
+    navigationChanged()
   }
   function onChange(event: Event) {
     const input = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -606,12 +797,8 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
       state.replaceAcknowledged = (input as HTMLInputElement).checked; persist(); render()
     }
   }
-  async function onSubmit(event: Event) {
-    const form = event.target as HTMLFormElement
-    if (!form.dataset.intakeForm) return
-    event.preventDefault()
-    if (form.dataset.intakeForm === 'answer') await submitAnswer()
-    if (form.dataset.intakeForm === 'resolve' && !busy) {
+  async function submitResolution(form: HTMLFormElement) {
+    if (!busy && !disposed && !storageBlocked) {
       const item = state.result?.items.find(item => item.id === form.dataset.intakeId)
       const reply = form.querySelector<HTMLTextAreaElement>('textarea')?.value.trim()
       if (!item || !reply) return
@@ -619,7 +806,13 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
       state = answerQuestion(state, { id: `owner_${Date.now().toString(36)}`, targetId: item.id, dimension: 'scope', text: question, reason: '', options: [], allowMultiple: false, priority: 'scope' }, reply, 'answered')
       persist(); await analyze('draft')
     }
-
+  }
+  async function onSubmit(event: Event) {
+    const form = event.target as HTMLFormElement
+    if (!form.dataset.intakeForm) return
+    event.preventDefault()
+    if (form.dataset.intakeForm === 'answer') await submitAnswer()
+    if (form.dataset.intakeForm === 'resolve') await submitResolution(form)
   }
   container.addEventListener('click', onClick)
   container.addEventListener('input', onInput)
@@ -628,7 +821,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
   if (areaAdded) contextChanged()
   else if (contextSynchronized || planningArea !== undefined) persist()
   render()
-  return { focusExpression() { chooseStage('express'); container.querySelector<HTMLElement>('#intake-brief')?.focus() }, dispose() {
+  return { navigation, advance, previous, refreshSaveState, focusExpression() { chooseStage('express'); container.querySelector<HTMLElement>('#intake-brief')?.focus() }, dispose() {
     disposed = true; gate.dispose(); controller?.abort()
     container.removeEventListener('click', onClick); container.removeEventListener('input', onInput)
     container.removeEventListener('change', onChange); container.removeEventListener('submit', onSubmit)

@@ -58,12 +58,20 @@
 }
 
 .lucid-app:not(.home-page) .studio-header {
-  padding: 24px clamp(20px, 3.7vw, 56px) 0;
+  padding: 16px clamp(20px, 3.7vw, 56px) 0;
 }
 
 .lucid-app:not(.home-page) .studio-main {
-  padding: 38px clamp(20px, 3.7vw, 56px) 70px;
+  padding: 20px clamp(20px, 3.7vw, 56px) 70px;
 }
+
+.lucid-app:not(.home-page) .header-main { min-height: 48px; }
+.lucid-app:not(.home-page) .project-switch { min-width: 0; }
+.lucid-app:not(.home-page) .project-switch > div { min-width: 0; }
+.lucid-app:not(.home-page) .project-switch small { display: block; font-size: 12px; line-height: 1.6; }
+.lucid-app:not(.home-page) .project-switch b { overflow-wrap: anywhere; }
+.project-save-status { color: #6d6875; font-size: 12px; font-weight: 400; line-height: 1.6; }
+.project-save-status[data-save-phase='error'], .project-save-status[data-save-phase='blocked'] { color: #964f55; }
 
 .lucid-app:not(.home-page) .studio-mark {
   color: #696482;
@@ -87,7 +95,7 @@
 }
 
 .lucid-app:not(.home-page) .studio-navigation {
-  margin-top: 23px;
+  margin-top: 10px;
   padding: 6px;
   border-color: rgba(255, 255, 255, 0.84);
   background: rgba(255, 254, 253, 0.55);
@@ -122,28 +130,28 @@
 }
 
 .lucid-app:not(.home-page) .task-context {
-  margin-bottom: 24px;
-  font-size: 11px;
+  margin-bottom: 12px;
+  font-size: 12px;
 }
 
 .lucid-app:not(.home-page) .page-heading {
-  margin-bottom: 34px;
+  margin-bottom: 20px;
 }
 
 .lucid-app:not(.home-page) :is(.page-heading h1, .planning-header h1) {
   font-family: var(--font-display, var(--font-sans));
   font-weight: 500;
-  font-size: clamp(29px, 3vw, 42px);
-  letter-spacing: -0.035em;
-  line-height: 1.5;
+  font-size: 32px;
+  letter-spacing: -0.025em;
+  line-height: 1.4;
   color: #36323e;
 }
 
 .lucid-app:not(.home-page) .page-heading p {
   max-width: 68ch;
-  margin-top: 13px;
-  font-size: 13px;
-  line-height: 1.95;
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .lucid-app:not(.home-page) :is(.primary, .planning-primary, .intake-button--primary, .hub-button) {
@@ -353,9 +361,9 @@
 
 .lucid-app:not(.home-page) .intake-root :is(.intake-section-heading h2, .intake-draft-heading h2) {
   font-family: var(--font-display, var(--font-sans));
-  font-size: clamp(23px, 2.2vw, 30px);
+  font-size: 24px;
   font-weight: 500;
-  line-height: 1.55;
+  line-height: 1.4;
 }
 
 .lucid-app:not(.home-page) .intake-root .intake-question h3 {
@@ -478,24 +486,24 @@
 
 @media (max-width: 680px) {
   .lucid-app:not(.home-page) .studio-header {
-    padding-top: 16px;
+    padding-top: 12px;
   }
 
   .lucid-app:not(.home-page) .studio-navigation {
-    margin-top: 16px;
+    margin-top: 8px;
   }
 
   .lucid-app:not(.home-page) .studio-main {
-    padding-top: 26px;
+    padding-top: 16px;
   }
 
   .lucid-app:not(.home-page) .page-heading {
-    margin-bottom: 25px;
+    margin-bottom: 18px;
   }
 
   .lucid-app:not(.home-page) :is(.page-heading h1, .planning-header h1) {
-    font-size: 29px;
-    line-height: 1.45;
+    font-size: 26px;
+    line-height: 1.4;
   }
 
   .lucid-app:not(.home-page) .intake-root .intake-panel {

@@ -1,0 +1,14 @@
+{
+  "requirementVersion": 1,
+  "requirements": [
+    {
+      "id": "K01", "title": "洗碗机与配套", "description": "预留洗碗机安装位，说明供水、排水与电源配套。",
+      "room": "厨房", "category": "水电与安装", "priority": "must", "source": "用户确认", "pending": ["设备尺寸待确认", "现有供排水接口待现场核实"]
+    },
+    {
+      "id": "K02", "title": "保留现有布局", "description": "尽量保留水槽与冰箱的现有位置，如需移动请先说明原因。",
+      "room": "厨房", "category": "布局", "priority": "prefer", "source": "用户确认", "pending": ["可调整范围待业主确认"]
+    }
+  ],
+  "projectContext": [{ "id": "household", "text": "两人经常做饭，希望清洁更省心。", "confirmed": true }]
+}

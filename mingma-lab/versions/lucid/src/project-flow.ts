@@ -20,6 +20,6 @@ export const stepInstructions: Record<ProjectStep, string> = {
   clarify: '先描述想法，再逐题补充。确认问卷后进入“我的需求”。',
   requirements: '核对这份清单，点击“提交需求，等待方案”继续。',
   compare: '先查看商家方案，再对照你的需求；演示方案点击即可展示。',
-  space: '查看工程层次。看完后回到方案对比，选择合适的方案。',
+  space: '对照当前户型核对各房间的需求，再回到方案对比继续选择。',
   records: '本次选择和待确认事项已留存，可以返回前面任意步骤查看。',
 }

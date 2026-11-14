@@ -148,6 +148,15 @@ function wallsFor(model: PlanningModel): Wall[] {
   })
 }
 
+export function planningWallSegments(model: PlanningModel): PlanSegment[] {
+  if (model.recognized) return model.walls || []
+  return wallsFor(model).map(({ owner, bounds: [x, z, w, d] }) => ({
+    roomId: owner,
+    start: w >= d ? [x, z + d / 2] : [x + w / 2, z],
+    end: w >= d ? [x + w, z + d / 2] : [x + w / 2, z + d],
+  }))
+}
+
 function renderWalls(walls: Wall[]) {
   return walls.map(({ bounds, height }) => box(bounds, height, wall, 0, 'data-model-wall')).join('')
 }

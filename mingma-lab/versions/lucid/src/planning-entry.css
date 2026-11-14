@@ -23,25 +23,25 @@
   background: transparent;
   border-radius: 0;
 }
-.planning-page .planning-header { margin-bottom: 35px; }
-.planning-page .planning-back { font-size: 18px; font-weight: 400; color: #6c7064; gap: 12px; }
-.planning-page .plan-entry-layout { display: grid; grid-template-columns: minmax(0, .58fr) minmax(0, 1fr); gap: 4.2vw; align-items: center; }
+.planning-page .planning-header { margin-bottom: 16px; }
+.planning-page .planning-back { font-size: 14px; font-weight: 400; color: #6c7064; gap: 8px; min-height: 32px; }
+.planning-page .plan-entry-layout { display: grid; grid-template-columns: minmax(0, .58fr) minmax(0, 1fr); gap: 4.2vw; align-items: start; }
 .planning-page .plan-entry-copy h1 {
   margin: 0;
   color: #171e18;
-  font: 400 clamp(36px, 4.7vw, 64px)/1.4 var(--font-display);
+  font: 400 42px/1.4 var(--font-display);
   letter-spacing: -.025em;
   text-wrap: balance;
 }
 .planning-page .plan-entry-copy h1 span { color: #35564a; white-space: nowrap; }
 .planning-page .plan-entry-copy > p:not(.plan-source-status) {
-  margin-top: 34px;
+  margin-top: 18px;
   color: #6c7064;
-  font-size: clamp(17px, 1.85vw, 24px);
-  line-height: 1.85;
+  font-size: 17px;
+  line-height: 1.75;
   max-width: 23em;
 }
-.planning-page .plan-entry-actions { border-top: 1px solid #dfd8c9; margin-top: 42px; padding-top: 35px; }
+.planning-page .plan-entry-actions { border-top: 1px solid #dfd8c9; margin-top: 24px; padding-top: 20px; }
 .lucid-app.planning-page .planning-primary {
   color: #fffef9;
   background: #35564a;
@@ -51,11 +51,11 @@
 .lucid-app.planning-page .planning-primary:hover:not(:disabled) { background: #284638; }
 .planning-page .plan-entry-actions > .planning-primary {
   width: 100%;
-  min-height: 82px;
-  padding: 18px 24px;
+  min-height: 58px;
+  padding: 14px 20px;
   justify-content: space-between;
   border-radius: 13px;
-  font-size: clamp(18px, 1.85vw, 24px);
+  font-size: 18px;
   font-weight: 650;
 }
 .planning-page .planning-drawing-actions { gap: 10px 24px; justify-content: flex-start; margin-top: 20px; }
@@ -66,7 +66,7 @@
   padding-inline: 0;
   min-height: 44px;
   color: #35564a;
-  font-size: clamp(15px, 1.65vw, 20px);
+  font-size: 14px;
   font-weight: 400;
   text-decoration: none;
 }
@@ -76,15 +76,15 @@
 .planning-page .planning-drawing-screen {
   min-width: 0;
   width: 100%;
-  padding: clamp(20px, 2.7vw, 38px);
+  padding: 24px;
   background: #fffcf7;
   border: 1px solid #dfd8c9;
   border-radius: 19px;
   color: #26382f;
 }
-.planning-page .planning-drawing-toolbar { gap: 12px; margin-bottom: 26px; }
-.planning-page .planning-drawing-toolbar h2 { color: #171e18; font: 600 clamp(20px, 2.2vw, 28px)/1.4 var(--font-display); }
-.planning-page .planning-drawing-toolbar > span { background: #ececdf; color: #626958; padding: 7px 12px; border-radius: 8px; font-size: 15px; }
+.planning-page .planning-drawing-toolbar { gap: 12px; margin-bottom: 18px; }
+.planning-page .planning-drawing-toolbar h2 { color: #171e18; font: 500 23px/1.4 var(--font-display); }
+.planning-page .planning-drawing-toolbar > span { background: #ececdf; color: #626958; padding: 7px 12px; border-radius: 8px; font-size: 12px; }
 .planning-page .planning-paper { margin: 0; border: 1px solid #e4ddce; border-radius: 7px; overflow: hidden; background: #faf7ee; }
 .planning-page .planning-paper > svg { width: 100%; max-height: none; aspect-ratio: 1.43; }
 .planning-page .planning-upload-paper { max-height: none; width: min(100%, calc(60vh * var(--drawing-aspect))); margin-inline: auto; }
@@ -132,17 +132,17 @@
 .planning-page .planning-stage { background: radial-gradient(ellipse at 65% 28%, #e9e7f4, #f5f0e8 70%); }
 .planning-page :focus-visible { outline-color: #655583; }
 @media (min-width: 1400px) {
-  .planning-page .plan-entry-layout { min-height: calc(100svh - 260px); }
+  .planning-page .plan-entry-layout { min-height: 0; }
 }
 @media (max-width: 800px) {
   .plan-main { padding: 20px 24px 44px; }
-  .planning-page .planning-header { margin-bottom: 24px; }
+  .planning-page .planning-header { margin-bottom: 12px; }
   .planning-page .planning-back { font-size: 15px; }
-  .planning-page .plan-entry-layout { grid-template-columns: minmax(0, 1fr); gap: 30px; }
-  .planning-page .plan-entry-copy h1 { font-size: clamp(36px, 6vw, 48px); }
-  .planning-page .plan-entry-copy > p:not(.plan-source-status) { margin-top: 18px; font-size: 17px; }
-  .planning-page .plan-entry-actions { margin-top: 24px; padding-top: 24px; }
-  .planning-page .plan-entry-actions > .planning-primary { min-height: 62px; font-size: 19px; }
+  .planning-page .plan-entry-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .planning-page .plan-entry-copy h1 { font-size: 34px; }
+  .planning-page .plan-entry-copy > p:not(.plan-source-status) { margin-top: 12px; font-size: 16px; }
+  .planning-page .plan-entry-actions { margin-top: 18px; padding-top: 18px; }
+  .planning-page .plan-entry-actions > .planning-primary { min-height: 56px; font-size: 17px; }
   .planning-page .planning-drawing-toolbar { gap: 8px; margin-bottom: 20px; }
   .planning-page .planning-drawing-toolbar > span { font-size: 12px; padding: 6px 8px; }
   .planning-page .planning-drawing-actions { gap: 12px 20px; margin-top: 12px; }

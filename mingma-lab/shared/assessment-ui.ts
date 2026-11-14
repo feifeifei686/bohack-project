@@ -3,7 +3,7 @@ import { dimensions, riskLabels, assessmentOwners, blockedIssues, type Assessmen
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 const button = (label: string, action: string, extra = '', cls = 'secondary-button') => `<button type="button" class="${cls}" data-action="${action}" ${extra}>${label}</button>`
 export type AssessmentTarget = { key: string; label: string }
-export function renderAssessment(run: AssessmentRun, options: { targets: AssessmentTarget[]; stale: boolean; filter: Dimension | 'all'; canSelect: boolean; isDraft: boolean }): string {
+export function renderAssessment(run: AssessmentRun, options: { targets: AssessmentTarget[]; stale: boolean; filter: Dimension | 'all'; canSelect: boolean; isDraft: boolean; persistent?: boolean }): string {
   const blocked = blockedIssues(run, options.isDraft ? 'publish' : 'select')
   const visible = run.issues.filter(i => options.filter === 'all' || i.dimension === options.filter)
   const selectedDimension = run.dimensions.find(d => d.id === options.filter)
@@ -31,7 +31,7 @@ export function renderAssessment(run: AssessmentRun, options: { targets: Assessm
         </article>`
       }).join('') : `<div class="assessment-empty"><h3>${selectedDimension?.level === 'pending' ? '还需要更多依据' : '本轮没有记录待处理问题'}</h3><p>${selectedDimension?.level === 'pending' ? esc(selectedDimension.detail) : '这只反映当前资料与规则覆盖范围，未提供的信息仍需后续核实。'}</p></div>`}
       </section>
-    </div><p class="assessment-session-note">评估与处理记录保留在本轮页面中，刷新会清空。离开前可导出评估或完整项目。</p>
+    </div><p class="assessment-session-note">${options.persistent ? '评估与处理记录随项目自动保存在此浏览器，也可以导出评估或完整项目备份。' : '评估与处理记录保留在本轮页面中，刷新会清空。离开前可导出评估或完整项目。'}</p>
   </div>`
 }
 

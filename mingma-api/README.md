@@ -40,6 +40,7 @@ curl -X POST http://127.0.0.1:5199/api/ai/intake \
 | `GET /api/health` | 服务状态及密钥是否配置 | 不调用模型 |
 | `GET /api/openapi.json` | 读取生成的接口契约 | 不调用模型 |
 | `POST /api/ai/intake` | 多区域拆分、动态追问和四组需求草稿 | [intake.json](examples/intake.json) |
+| `POST /api/ai/requirement-insight` | 提交后的 Flash 二次分析、需求关联与有依据的量化结论 | [requirement-insight.json](examples/requirement-insight.json) |
 | `POST /api/ai/floorplan` | 从图片识别房间、墙线、门窗和可见家具候选 | [输入与坐标约定](../docs/api/README.md#户型图识别) |
 | `POST /api/ai/clarify` | 从表达中提取事实并选择下一轮问题 | [clarify.json](examples/clarify.json) |
 | `POST /api/ai/requirements` | 将对话整理为待确认需求草稿 | [requirements.json](examples/requirements.json) |
@@ -47,6 +48,8 @@ curl -X POST http://127.0.0.1:5199/api/ai/intake \
 | `POST /api/ai/explain` | 解释方案，起草用户待确认的反馈 | [explain.json](examples/explain.json) |
 
 成功的 AI 响应统一为 `{ requestId, data, meta }`，`meta.requiresHumanConfirmation` 始终为 `true`。模型输出先通过结构与引用检查；字段不合法、证据引用不成立或内容不完整时，不作为正常结果返回。具体防护和错误状态见[接口说明](../docs/api/README.md)。
+
+需求推演固定请求 `deepseek-flash`，只返回分析摘要，不返回内部思维过程。清晰占比是通过原文校验的 `clear` 条目数除以需求总数；必须项、关联数和待确认数均由服务端计算。表达清楚不等于现场已核实，既有 `pending` 始终合并保留。分析失败不应撤销前端已经提交的版本，调用方可以对同一快照重试。
 
 ## 前端调用
 

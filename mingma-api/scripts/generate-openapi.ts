@@ -1,4 +1,5 @@
 import { FloorplanRequest, FloorplanOutput } from '../src/floorplan.ts'
+import { RequirementInsightInput, RequirementInsightSuccess } from '../src/requirement-insight.ts'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +15,8 @@ const descriptions: Record<Operation, { title: string; description: string }> = 
 }
 const operations = Object.keys(schemas) as Operation[]
 const inputs = Object.fromEntries(operations.map(operation => [operation, JSON.parse(readFileSync(new URL(`../examples/${operation}.json`, import.meta.url), 'utf8'))])) as Record<Operation, unknown>
+const insightInput = JSON.parse(readFileSync(new URL('../examples/requirement-insight.json', import.meta.url), 'utf8'))
+const insightDescription = '针对已提交的需求快照再调用一次 DeepSeek Flash，给出逐项表达清晰度、原文依据、跨需求关联与后续建议。不会修改或发布需求，不输出内部思维链。每条需求恰好一个 finding；关联必须引用两个端点且不能自连或重复。服务端保留原有待确认项，并按校验后的结果计算条数与清晰占比，不接受模型评分。表达清晰不代表施工可行。'
 const jsonSchema = (schema: z.ZodType, io: 'input' | 'output') => {
   const value = z.toJSONSchema(schema, { target: 'draft-2020-12', io })
   delete value.$schema
@@ -62,6 +65,17 @@ for (const operation of operations) {
   }
 }
 componentSchemas.FloorplanRequest = jsonSchema(FloorplanRequest, 'input')
+componentSchemas.RequirementInsightRequest = jsonSchema(RequirementInsightInput, 'input')
+componentSchemas.RequirementInsightResponse = jsonSchema(RequirementInsightSuccess, 'output')
+paths['/api/ai/requirement-insight'] = { post: {
+  tags: ['AI'], operationId: 'requirementInsight', summary: '提交后推演需求关系与量化结论', description: insightDescription,
+  security: [{}, { localAccessToken: [] }],
+  requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RequirementInsightRequest' }, example: insightInput } } },
+  responses: {
+    '200': { description: '有需求原文依据的分析建议与服务端派生统计。', content: { 'application/json': { schema: { $ref: '#/components/schemas/RequirementInsightResponse' } } } },
+    ...errorResponses,
+  },
+} }
 componentSchemas.FloorplanResult = jsonSchema(FloorplanOutput, 'output')
 paths['/api/ai/floorplan'] = { post: {
   tags: ['AI'], operationId: 'recognizeFloorplan', summary: '识别上传户型图中的房间、门窗和家具',
@@ -122,7 +136,7 @@ const requestItem = (operation: Operation) => ({
   ] } }],
 })
 const collection = {
-  info: { name: '明码 AI 本地接口', description: '合成装修需求数据。五个成功请求会调用实际配置的模型；运行前确认目标服务和成本。自动生成自 schemas.ts 与 examples/，不要将真实密钥写入变量。', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+  info: { name: '明码 AI 本地接口', description: '合成装修需求数据。成功请求会调用实际配置的模型；运行前确认目标服务和成本。自动生成自 schemas.ts、requirement-insight.ts 与 examples/，不要将真实密钥写入变量。', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
   variable: [{ key: 'baseUrl', value: 'http://127.0.0.1:5199', type: 'string' }, { key: 'accessToken', value: '', type: 'string' }],
   event: [{ listen: 'prerequest', script: { type: 'text/javascript', exec: [
     "const token = pm.variables.get('accessToken');",
@@ -131,6 +145,18 @@ const collection = {
   item: [
     { name: '服务健康状态', request: { method: 'GET', url: '{{baseUrl}}/api/health' }, event: [{ listen: 'test', script: { type: 'text/javascript', exec: ["pm.test('health', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().service).to.equal('mingma-ai-api'); });"] } }] },
     ...operations.map(requestItem),
+    {
+      name: '提交后推演需求关系与量化结论',
+      request: { method: 'POST', header: [{ key: 'Content-Type', value: 'application/json' }],
+        body: { mode: 'raw', raw: JSON.stringify(insightInput, null, 2), options: { raw: { language: 'json' } } },
+        url: '{{baseUrl}}/api/ai/requirement-insight', description: insightDescription },
+      event: [{ listen: 'test', script: { type: 'text/javascript', exec: [
+        "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+        "const body = pm.response.json(); const input = JSON.parse(pm.request.body.raw);",
+        "pm.test('Flash advisory response for this version', () => { pm.expect(body.data.requirementVersion).to.equal(input.requirementVersion); pm.expect(body.meta.model).to.equal('deepseek-flash'); pm.expect(body.meta.requiresHumanConfirmation).to.equal(true); });",
+        "pm.test('all requirements covered and metrics derived', () => { const m = body.data.metrics; const f = body.data.findings; pm.expect(f.map(x => x.requirementId).sort()).to.eql(input.requirements.map(x => x.id).sort()); pm.expect(m.total).to.equal(input.requirements.length); pm.expect(m.clear).to.equal(f.filter(x => x.clarity === 'clear').length); pm.expect(m.clarityPercent).to.equal(Math.round(m.clear / m.total * 100)); pm.expect(m.pendingChecks).to.equal(new Set(f.flatMap(x => x.checks)).size); });",
+      ] } }],
+    },
     ...[
       { name: '拒绝未知输入字段', operation: 'clarify', body: { ...inputs.clarify as object, unexpected: true }, status: 400, code: 'VALIDATION_ERROR' },
       { name: '拒绝过期需求版本', operation: 'review', body: { ...inputs.review as object, requirementVersion: 2 }, status: 409, code: 'REQUIREMENT_VERSION_MISMATCH' },

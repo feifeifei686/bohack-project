@@ -34,14 +34,14 @@ Windows 可使用 `py -m http.server 5190 --bind 127.0.0.1`。
 
 从首页选择“开始硬装规划”或“体验完整案例”。
 
-演示数据只在当前页面内保留。刷新或重新打开后清空，可以提前导出项目。
+项目保存在当前浏览器、当前地址的 IndexedDB，刷新后可继续。更换浏览器或端口不会自动共享；请提前导出重要记录。
 
 独立体验包需要同源 API 服务才能使用 AI 共创。商家方案使用本地规则。所有商家方案、户型与尺寸都是演示；价格不参与判断。
 '''
 
 def keep_source(path):
     parts = path.relative_to(root).parts
-    if any(p in {'node_modules', 'dist', '.git', '.gstack', '__pycache__'} for p in parts):
+    if any(p in {'node_modules', 'dist', '.git', '.gstack', '__pycache__', '.impeccable'} for p in parts):
         return False
     if path.name == '.DS_Store' or path.name.startswith('.env'):
         return False

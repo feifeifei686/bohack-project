@@ -19,7 +19,7 @@ export function renderPlanningSource(model: PlanningModel, editorial = false, ac
       <div class="plan-entry-copy">
         <h1 ${active ? 'id="planning-title"' : ''}>从图纸，<br><span>到你的空间。</span></h1>
         <p>上传户型图，AI 识别房间与家具，再生成你的立体空间。</p>
-        <p class="plan-upload-note">支持 JPG、PNG、WebP，最大 12 MB。选图后自动发送至 DeepSeek 识别，仅在本轮页面保留。</p><div class="plan-entry-actions">
+        <p class="plan-upload-note">支持 JPG、PNG、WebP，最大 12 MB。选图后自动发送至 AI 识别，结果可继续核对和修改。</p><div class="plan-entry-actions">
           <button type="button" class="planning-primary" data-plan-step="build" ${model.rooms.length && model.analysisState !== 'pending' ? '' : 'disabled'}>${model.analysisState === 'pending' ? '正在识别图纸…' : '生成立体户型'}${arrow}</button>
           <div class="planning-drawing-actions">
             <label class="planning-upload">${upload}上传图纸<input type="file" data-plan-upload accept="image/png,image/jpeg,image/webp" aria-label="上传户型图纸"></label>

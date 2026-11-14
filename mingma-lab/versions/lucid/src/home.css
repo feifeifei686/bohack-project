@@ -74,7 +74,7 @@
   display: block;
   margin-top: 6px;
   color: var(--home-muted);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.01em;
 }
 
@@ -402,7 +402,8 @@
   min-height: 44px;
   margin-top: 9px;
   color: var(--home-accent);
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .home-secondary:hover,
@@ -421,8 +422,8 @@
   justify-content: space-between;
   gap: 20px;
   color: var(--home-muted);
-  font-size: 10px;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  letter-spacing: 0.02em;
 }
 
 .home-scroll {
@@ -431,7 +432,7 @@
   gap: 16px;
   min-height: 44px;
   padding-inline: 12px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .home-process {
@@ -522,6 +523,33 @@
 
 .home-process-list button:hover svg {
   transform: translateX(4px);
+}
+
+.home-outcome {
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 64px var(--home-gutter) 72px;
+}
+.home-outcome > header { max-width: 740px; margin-bottom: 32px; }
+.home-outcome h2 { font-family: var(--font-display); font-size: 36px; line-height: 1.45; font-weight: 500; letter-spacing: -.025em; }
+.home-outcome > header p { color: var(--home-muted); font-size: 14px; line-height: 1.9; margin-top: 12px; }
+.home-outcome-example { display: grid; grid-template-columns: .85fr 1fr 1.15fr; gap: 28px; padding-block: 28px; border-block: 1px solid var(--home-line); }
+.home-outcome-example article { min-width: 0; }
+.home-outcome-example article > p:first-child { font-size: 12px; color: var(--home-muted); margin: 0 0 12px; }
+.home-outcome-example h3 { margin: 0; font-size: 20px; line-height: 1.65; font-weight: 500; color: var(--home-ink); }
+.home-outcome-example article > p:last-child { margin-top: 12px; color: var(--home-muted); font-size: 14px; line-height: 1.9; }
+.home-outcome > footer { display: flex; justify-content: flex-end; margin-top: 16px; }
+.home-outcome .home-text-link { font-size: 14px; }
+@media (max-width: 700px) {
+  .home-outcome { padding-block: 42px 50px; }
+  .home-outcome h2 { font-size: 30px; }
+  .home-outcome > header { margin-bottom: 20px; }
+  .home-outcome-example { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0; }
+  .home-outcome-example article { padding-block: 22px; }
+  .home-outcome-example article + article { border-top: 1px solid var(--home-line); }
+  .home-outcome-example article > p:first-child { margin-bottom: 6px; }
+  .home-outcome-example article > p:last-child { margin-top: 7px; }
+  .home-outcome > footer { justify-content: flex-start; }
 }
 
 .home-project {
@@ -767,19 +795,19 @@
   .home-secondary {
     justify-content: center;
     margin-top: 5px;
-    min-height: 38px;
-    font-size: 11px;
+    min-height: 44px;
+    font-size: 13px;
   }
   .home-hero-foot {
     bottom: 20px;
     gap: 12px;
-    font-size: 9px;
+    font-size: 12px;
   }
   .home-scene-caption {
     display: none;
   }
   .home-scroll {
-    font-size: 10px;
+    font-size: 12px;
     gap: 8px;
     padding-right: 0;
   }

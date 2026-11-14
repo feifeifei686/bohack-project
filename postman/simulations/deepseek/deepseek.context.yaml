@@ -2,6 +2,13 @@ purpose:
   stands_in_for: DeepSeek POST /chat/completions over a local HTTP dependency simulation, with synthetic model responses and deliberate failures.
   unblocks: Verification of the real Mingma API HTTP client, output validation, error mapping, version checks and safe error responses without provider credentials or billing.
 assumptions:
+  - id: submitted-requirement-insight
+    status: supported
+    claim: In the exercised local cases, the second-pass insight endpoint calls Flash once, validates one finding per requirement and both graph endpoints, retains existing pending items, derives all metrics server-side, and returns controlled failures without a fake successful analysis.
+    reason: The real Node API ran against the existing local Postman dependency; actual HTTP traffic and mock counters proved the new operation was called. The stand-in supplies synthetic findings and does not establish real-model semantic accuracy.
+    verification: On 2026-11-14 the expanded simulation passed 46 checks, including insight success, forged evidence, duplicate findings, upstream 500 and timeout. The generated collection passed 24 assertions with zero failures. There were 43 baseline upstream requests and 49 total requests including the collection, matched by 49 request events. API build and 61 unit/HTTP tests also passed. The CLI status command was unavailable in installed 1.79.0; no workspace was initialized or published.
+    source: mingma-api/src/requirement-insight.ts ; mingma-api/tests/requirement-insight.test.ts ; mingma-api/scripts/simulation-check.ts ; postman/mocks/deepseek/default.js ; /var/folders/zl/26bv056958x08_19y7m3v3xw0000gn/T/mingma-api-simulation-BmnRJo/report.json
+    updated_at: '2026-11-14'
   - id: floorplan-vision-contract
     status: supported
     claim: The floorplan caller sends an inline image content part and returns validated candidate room polygons, openings and furniture; failed recognition does not become demo geometry.
@@ -60,6 +67,10 @@ assumptions:
     source: mingma-lab/scripts/browser-questionnaire-start.js ; mingma-lab/scripts/browser-questionnaire-finish.js ; mingma-lab/scripts/browser-questionnaire-proposals.js ; docs/questionnaire-workflow-verification.json
     updated_at: '2026-11-14'
 fingerprints:
+  - id: submitted-requirement-insight-local-integration
+    date: '2026-11-14'
+    commit: null
+    cli: 'Postman CLI 1.79.0; Node.js 24; dirty working tree; 46 baseline checks plus 24 collection assertions'
   - id: initial-local-integration
     date: '2026-11-14'
     commit: null

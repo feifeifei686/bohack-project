@@ -1,3 +1,4 @@
+import { saveRoomRequirements, combinedRoomDocument, type RoomWork } from '../../../shared/room-work'
 import { initializeProjectContext, contextAnswers, projectContextChanged, renderRequirementsOverview, renderProjectContext, renderLegacyArchive, type ProjectContext } from '../../../shared/requirements-hub'
 import '../../../shared/requirements-hub.css'
 import { createRoomPlanning } from '../../../shared/room-planning'
@@ -5,17 +6,33 @@ import { captureFloorplanHandoff, intakeWithSpaceMarkup, mountIntakeSpacePreview
 import { mountIntake } from '../../../shared/intake-ui'
 import { intakeRequirementRow, adoptedIntakeHtml, stateFromAdoptedIntake } from '../../../shared/intake-bridge'
 import type { IntakeDocument } from '../../../shared/intake-contract'
+import type { RequirementInsightRequest, RequirementInsightResponse } from '../../../shared/requirement-insight-contract'
+import { requestRequirementInsight, validRequirementInsight } from '../../../shared/requirement-insight-request'
+import { renderRequirementInsight, mountRequirementInsight } from './requirement-insight-view'
+import './requirement-insight.css'
+import { workflowTask } from './workflow-action'
+import { renderWorkflowDock, updateWorkflowDock, mountWorkflowDock, highlightWorkflowTarget, clearWorkflowHighlight, type WorkflowDockInput } from './workflow-dock'
+import './workflow-dock.css'
+import './workflow-integration.css'
 import '../../../shared/intake-bridge.css'
 import './style.css'
 import './home.css'
 import './luminous-workspace.css'
 import './planning-entry.css'
 import './guided-workflow.css'
+import './project-experience.css'
+import { renderProjectSpace, highlightProjectRoom, modelSource } from './project-space'
+import { comparisonInsights } from './comparison-insights'
+import { renderProjectReport } from './project-report'
+import { createProjectStorage, type ProjectSaveStatus } from './project-storage'
+import { decodeRoomPlanningSnapshot } from '../../../shared/planning-snapshot'
+import { restoreIntakeState, validResult } from '../../../shared/intake-state'
+import { validProjectState } from '../../../shared/project-session-validation'
 import { evaluateAssessment, assessmentIsStale, blockedIssues, assessmentOwners, type AssessmentInput, type AssessmentRun, type AssessmentNote, type Dimension } from '../../../shared/assessment'
 import { renderAssessment, renderAssessmentArchive } from '../../../shared/assessment-ui'
 import '../../../shared/assessment.css'
 import { localRecordId } from '../../../shared/local-record-id'
-import { projectSteps, unlockedStep, canVisit, stepInstructions, type ProjectStep } from './project-flow'
+import { projectSteps, unlockedStep, canVisit, type ProjectStep } from './project-flow'
 import { proposalSamples, createSampleProposal } from './proposal-samples'
 import { mountHomeScene } from './home-scene'
 import { createHomeArrival } from './home-arrival'
@@ -48,11 +65,13 @@ type Page =
   | 'records'
   | 'vendor'
   | 'assessment'
-type Snapshot = { version: number; requirements: Requirement[]; at: string; intakeDocument?: IntakeDocument; projectContext?: ProjectContext; assessment?: AssessmentRun }
+type Snapshot = { version: number; requirements: Requirement[]; at: string; intakeDocument?: IntakeDocument; projectContext?: ProjectContext; assessment?: AssessmentRun; insight?: RequirementInsightResponse }
 type Feedback = { id: string; proposalId: string; version: number; items: string[]; at: string }
 type Selection = { proposal: Proposal; requirements: Snapshot; at: string; pending: string[]; assessment?: AssessmentRun }
 type State = {
   schema: 1
+  roomWork?: RoomWork[]
+  activeRoomId?: string
   assessments: AssessmentRun[]
   assessmentNotes: AssessmentNote[]
   intakeDocument?: IntakeDocument
@@ -69,16 +88,10 @@ type State = {
   dirty: boolean
 }
 const INTAKE_KEY = 'mingma-lucid-intake-v2'
-const legacyKeys = ['mingma-lucid-v1', INTAKE_KEY, 'mingma-lucid-dimensions-v1', 'mingma-lucid-drafts-v1']
-try {
-  for (const key of legacyKeys) localStorage.removeItem(key)
-} catch {
-  // Current demo state lives in memory, even when the browser blocks storage.
-}
 let intakeDraft: string | null = null
 const demoIntakeStorage = {
-  getItem: () => intakeDraft,
-  setItem: (_key: string, value: string) => { intakeDraft = value },
+  getItem: () => activeRoomWork()?.draft ?? (state.activeRoomId ? null : intakeDraft),
+  setItem: (_key: string, value: string) => { const room = activeRoomWork(); if (room) room.draft = value; else intakeDraft = value; scheduleProjectSave() },
 }
 let scales: Record<string, { maturity: number; priority: string; evidence: string }> = {}
 
@@ -99,6 +112,9 @@ const empty = (): State => ({
 })
 let state: State = empty()
 let planningChosen = false
+let currentArea: string | null = null
+let lastWorkspacePage: Page = 'planning'
+let selectedProjectRoom = 'all'
 let furthestUnlocked = 1
 let samplePreview: 'a' | 'b' | null = null
 let assessmentTarget = ''
@@ -109,14 +125,25 @@ window.addEventListener('pageshow', event => {
 if (location.hash === '#dimensions') history.replaceState(null, '', '#requirements')
 let page: Page = (location.hash.slice(1) as Page) || 'overview'
 let house: HouseView | undefined
-const planning = createRoomPlanning({ editorial: true })
+const planning = createRoomPlanning({ editorial: true, persistent: true })
 let planningEntry: string | null | undefined
 let previewFrom: FloorplanHandoff | undefined
 let intakePreview: ReturnType<typeof mountIntakeSpacePreview> | undefined
 let intakeSession: ReturnType<typeof mountIntake> | undefined
+let disposeInsight: (() => void) | undefined
+let disposeWorkflowDock: (() => void) | undefined
+let workflowUpdateQueued = false
+let workflowAdvancing = false
+let workflowChoosingProposal = false
+let workflowReturnPage: Page = 'requirements'
+let workflowPendingFocus: { selector: string; message: string } | null = null
+let insightVersion: number | null = null
+const insightJobs = new Map<number, { status: 'loading' | 'error'; error?: string; controller?: AbortController }>()
 let disposeHome: (() => void) | undefined
 let disposeEngineering: (() => void) | undefined
-let spaceMode: 'engineering' | 'rooms' = 'engineering'
+const wallSpace = planning.wallView
+let disposeWallSpace: (() => void) | undefined
+let spaceMode: 'project' | 'engineering' | 'rooms' | 'walls' = 'project'
 let homeArrival: ReturnType<typeof createHomeArrival> | undefined
 let homeArrivalKeyboard = false
 let intakeEntry: { focus: boolean; appendBrief?: string } | null = null
@@ -124,6 +151,7 @@ let vendorDrafts: Record<string, ProposalItem[]> = {}
 const draftKey = () => `${vendorId}-r${latest()?.version || 0}`
 function persistVendorDraft() {
   vendorDrafts[draftKey()] = clone(draftItems)
+  scheduleProjectSave()
 }
 let selectedRoom = 'kitchen',
   selectedRoute: string | null = null,
@@ -150,14 +178,181 @@ const now = () => new Date().toISOString()
 const clone = <T>(x: T): T => structuredClone(x)
 const latest = () => state.snapshots.at(-1)
 const projectContext = () => initializeProjectContext(state.projectContext, scales)
+function insightInput(snapshot: Snapshot): RequirementInsightRequest {
+  return {
+    requirementVersion: snapshot.version,
+    requirements: snapshot.requirements.map(({ id, title, description, room, category, priority, source, pending }) => ({ id, title, description, room, category, priority, source, pending: [...pending] })),
+    projectContext: contextAnswers(snapshot.projectContext || initializeProjectContext(undefined, {})),
+  }
+}
+function cancelInsightJobs() {
+  for (const job of insightJobs.values()) job.controller?.abort()
+  insightJobs.clear()
+  insightVersion = null
+}
+function focusInsight() {
+  const heading = document.querySelector<HTMLElement>('.requirement-insight h1')
+  if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }) }
+  window.scrollTo(0, 0)
+}
+async function startRequirementInsight(snapshot: Snapshot) {
+  insightVersion = snapshot.version
+  if (snapshot.insight || insightJobs.get(snapshot.version)?.status === 'loading') {
+    navigate('requirements'); focusInsight(); return
+  }
+  // Only the current request may attach its result to this exact snapshot object.
+  for (const [version, job] of insightJobs) if (job.status === 'loading') {
+    job.controller?.abort()
+    insightJobs.set(version, { status: 'error', error: '已切换到另一版需求的分析，可以重新分析此版本。' })
+  }
+  const controller = new AbortController()
+  const job = { status: 'loading' as const, controller }
+  insightJobs.set(snapshot.version, job)
+  navigate('requirements'); focusInsight()
+  try {
+    const response = await requestRequirementInsight(insightInput(snapshot), controller.signal)
+    if (controller.signal.aborted || insightJobs.get(snapshot.version) !== job || !state.snapshots.includes(snapshot)) return
+    snapshot.insight = response
+    insightJobs.delete(snapshot.version)
+    log(`Flash 完成需求 R${snapshot.version} 的二轮分析：${response.data.metrics.connections} 组关联，${response.data.metrics.needsDetail} 条待补充表达`)
+    scheduleProjectSave()
+  } catch (error) {
+    if (controller.signal.aborted || insightJobs.get(snapshot.version) !== job || !state.snapshots.includes(snapshot)) return
+    insightJobs.set(snapshot.version, { status: 'error', error: error instanceof Error ? error.message : '本轮分析暂未完成，请重试。需求已保留。' })
+  }
+  if (page === 'requirements' && insightVersion === snapshot.version) {
+    render()
+    toast(snapshot.insight ? 'Flash 二轮分析已完成，可查看需求图谱。' : '需求已保留，本轮分析未完成，可重试。')
+  }
+}
 const currentProposal = (id: 'a' | 'b') => state.proposals.filter((p) => p.vendorId === id).at(-1)
 const findings = (p: Proposal) =>
   reviewProposal(
     state.snapshots.find((s) => s.version === p.requirementVersion)?.requirements ?? [],
     p,
   )
+function activeRoomWork() { return state.roomWork?.find(room => room.id === state.activeRoomId) }
+function roomContextChanged() { return state.roomWork?.some(room => projectContextChanged(projectContext(), room.document)) || projectContextChanged(projectContext(), state.intakeDocument) }
+function enterRoomWork(id: string, name: string) {
+  intakeSession?.dispose(); intakeSession = undefined
+  if (!state.roomWork) {
+    state.roomWork = []
+    if (state.requirements.length || intakeDraft) state.roomWork.push({ id: 'legacy', name: '原有全屋需求', prefix: 'legacy', draft: intakeDraft, requirements: clone(state.requirements), document: state.intakeDocument ? clone(state.intakeDocument) : undefined, savedDraft: intakeDraft })
+  }
+  let room = state.roomWork.find(item => item.id === id)
+  if (!room) { room = { id, name, prefix: `room${state.roomWork.length + 1}`, draft: null, requirements: [] }; state.roomWork.push(room) }
+  room.name = name; state.activeRoomId = id; selectedProjectRoom = id === 'whole-home' || id === 'legacy' ? 'all' : id
+  planningChosen = true; currentArea = id === 'whole-home' ? null : name
+  planningEntry = room.draft ? undefined : currentArea
+  navigate('clarify')
+}
+function roomOverview() {
+  const entries = planning.model().rooms.map(room => ({ id: room.id, name: room.name }))
+  entries.push({ id: 'whole-home', name: '全屋与公共需求' })
+  for (const room of state.roomWork || []) if (!entries.some(item => item.id === room.id)) entries.push({ id: room.id, name: room.name })
+  return `<section class="room-work-overview"><h2>按房间整理，随时继续</h2><p>每间独立保存；只整理本次想改的房间。进行中的修改需保存房间需求后，才会纳入总清单。</p><div>${entries.map(entry => {
+    const work = state.roomWork?.find(room => room.id === entry.id)
+    const status = work?.requirements.length ? work.draft !== work.savedDraft ? '有修改待保存' : `已整理 · ${work.requirements.length} 条` : work?.draft ? '进行中' : '未开始'
+    return `<button data-action="room-work-open" data-id="${esc(entry.id)}"><b>${esc(entry.name)}</b><small>${status}</small></button>`
+  }).join('')}</div></section>`
+}
+function projectScope() {
+  if (page === 'planning' && planningChosen) return `${planning.selectedRoom()?.name || '全屋'}规划`
+  if (page === 'clarify' && intakeDraft) {
+    try { const areas = restoreIntakeState(intakeDraft).areas; if (areas.length) return areas.length === 1 ? `${areas[0]}改造` : '多空间改造' } catch { /* Recovery errors are reported by the project store. */ }
+  }
+  const areas = [...new Set(state.requirements.flatMap(req => req.intake?.areas ?? [req.room]))]
+  return areas.length === 1 ? `${areas[0]}改造` : areas.length ? '多空间改造' : currentArea ? `${currentArea}改造` : planningChosen ? '全屋规划' : '选择你的改造范围'
+}
+function resumePage(): Page { return routeAllowed(lastWorkspacePage) ? lastWorkspacePage : projectSteps[furthestUnlocked - 1] }
+type ProjectSession = {
+  state: State; intakeDraft: string | null; scales: typeof scales; vendorDrafts: typeof vendorDrafts;
+  planning: ReturnType<typeof planning.snapshot>; planningChosen: boolean; furthestUnlocked: number;
+  currentArea: string | null; lastWorkspacePage: Page; selectedProjectRoom: string; vendorId: 'a' | 'b';
+}
+let projectReady = false
+let saveStatus: ProjectSaveStatus = { phase: 'loading' }
+let recoveryError = ''
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+let lastSavedFingerprint = ''
+let hasUnsavedChanges = false
+function hasProjectDraft() { return planningChosen || !!planning.model().drawing || !!intakeDraft || !!state.requirements.length }
+function projectSaveText() {
+  if (recoveryError) return '草稿恢复失败 · 原记录已保留'
+  if (saveStatus.phase === 'error') return saveStatus.message || '未能保存，请先导出项目'
+  if (hasUnsavedChanges || saveStatus.phase === 'saving') return '正在保存到此浏览器…'
+  if (saveStatus.savedAt) return `已保存到此浏览器 · ${stamp(saveStatus.savedAt)}`
+  return projectReady ? '在此浏览器自动保存 · 可继续编辑' : '正在读取本机草稿…'
+}
+function refreshSaveStatus() {
+  for (const el of document.querySelectorAll<HTMLElement>('[data-project-save]')) {
+    el.textContent = projectSaveText()
+    el.dataset.savePhase = recoveryError ? 'error' : saveStatus.phase
+  }
+  for (const el of document.querySelectorAll<HTMLElement>('[data-project-scope]')) el.textContent = `${projectScope()} · ${planning.model().drawing ? '我的户型' : '演示户型'}`
+  intakeSession?.refreshSaveState()
+  queueWorkflowUpdate()
+}
+function recoveryNotice() {
+  return recoveryError ? `<section class="project-recovery" role="alert"><p>${esc(recoveryError)} 原记录未被覆盖，可以重试读取，或先下载原始记录留存。</p>${btn('重试读取', 'retry-project', 'secondary-button')}${btn('导出原始记录', 'export-recovery', 'text-button')}${btn('清除后重新开始', 'reset', 'text-button')}</section>` : ''
+}
+function captureProject(): ProjectSession {
+  return { state, intakeDraft, scales, vendorDrafts, planning: planning.snapshot(), planningChosen, furthestUnlocked, currentArea, lastWorkspacePage, selectedProjectRoom, vendorId }
+}
+function scheduleProjectSave() {
+  if (!projectReady || recoveryError) return
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => { void saveProject() }, 200)
+  refreshSaveStatus()
+}
+async function saveProject() {
+  clearTimeout(saveTimer)
+  if (!projectReady || recoveryError) return
+  const data = captureProject()
+  const fingerprint = JSON.stringify(data)
+  if (fingerprint === lastSavedFingerprint) return
+  hasUnsavedChanges = true
+  refreshSaveStatus()
+  try {
+    await projectStore.save(data)
+    lastSavedFingerprint = fingerprint
+    hasUnsavedChanges = JSON.stringify(captureProject()) !== fingerprint
+  } catch { /* The storage status callback keeps the failure visible. */ }
+  refreshSaveStatus()
+}
+function decodeProject(value: unknown): ProjectSession {
+  const object = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
+  const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string')
+  const requirement = (v: unknown): boolean => object(v) && ['id', 'title', 'description', 'room', 'category', 'source'].every(k => typeof v[k] === 'string') && ['must', 'prefer'].includes(v.priority) && strings(v.pending) && (!v.intake || validResult({ summary: '', items: [v.intake], questions: [], conflicts: [], readyForDraft: true, stopReason: '', warnings: [] }))
+  const proposal = (v: unknown): boolean => object(v) && typeof v.id === 'string' && ['a', 'b'].includes(v.vendorId) && typeof v.vendorName === 'string' && Number.isInteger(v.version) && Number.isInteger(v.requirementVersion) && Array.isArray(v.items) && v.items.every((x: unknown) => object(x) && typeof x.requirementId === 'string' && typeof x.text === 'string' && ['yes','partial','no','unknown'].includes(x.commitment))
+  const snapshot = (v: unknown): boolean => object(v) && Number.isInteger(v.version) && typeof v.at === 'string' && Array.isArray(v.requirements) && v.requirements.every(requirement)
+  if (!object(value) || !object(value.state)) throw Error('项目草稿格式无法读取。')
+  if (!validProjectState(value.state)) throw Error('项目草稿中的记录格式不兼容，原记录已保留。')
+  const s = value.state
+  if (s.roomWork !== undefined) {
+    if (!Array.isArray(s.roomWork) || s.roomWork.some((room: any) => !object(room) || !['id', 'name', 'prefix'].every(key => typeof room[key] === 'string') || !Array.isArray(room.requirements) || !room.requirements.every(requirement) || !(room.draft === null || typeof room.draft === 'string'))) throw Error('房间草稿格式无法读取，原记录已保留。')
+    if (new Set(s.roomWork.map((room: any) => room.id)).size !== s.roomWork.length) throw Error('房间编号重复，原记录已保留。')
+    for (const room of s.roomWork) { if (room.idMap !== undefined && (!object(room.idMap) || !Object.values(room.idMap).every(id => typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id)))) throw Error('房间需求编号映射无效，原记录已保留。'); if (room.draft) restoreIntakeState(room.draft); if (room.document && !validResult(room.document.result)) throw Error('房间需求文档无法读取。') }
+    if (s.activeRoomId && !s.roomWork.some((room: any) => room.id === s.activeRoomId)) throw Error('当前房间记录不存在。')
+  }
+  if (s.schema !== 1 || typeof s.brief !== 'string' || typeof s.dirty !== 'boolean' || !object(s.answers) || !strings(s.answers.devices) || !['layout','cleaning','cabinet','window'].every(k => typeof s.answers[k] === 'string') || !Array.isArray(s.requirements) || !s.requirements.every(requirement) || !Array.isArray(s.snapshots) || !s.snapshots.every(snapshot) || !Array.isArray(s.proposals) || !s.proposals.every(proposal) || !Array.isArray(s.events) || !s.events.every((x: unknown) => object(x) && typeof x.text === 'string' && typeof x.at === 'string') || !Array.isArray(s.feedback) || !s.feedback.every((x: unknown) => object(x) && typeof x.proposalId === 'string' && strings(x.items))) throw Error('项目草稿中的需求或方案格式不兼容。')
+  if (!Array.isArray(s.assessments) || !s.assessments.every((run: unknown) => object(run) && typeof run.targetKey === 'string' && Array.isArray(run.issues) && Array.isArray(run.dimensions) && Array.isArray(run.notes)) || !Array.isArray(s.assessmentNotes)) throw Error('项目草稿中的评估记录无法读取。')
+  if (s.intakeDocument && (!object(s.intakeDocument) || !validResult(s.intakeDocument.result, 1000))) throw Error('项目草稿中的需求文档无法读取。')
+  if (s.selection && (!object(s.selection) || !proposal(s.selection.proposal) || !snapshot(s.selection.requirements) || !strings(s.selection.pending))) throw Error('项目草稿中的确认记录无法读取。')
+  if (value.intakeDraft !== null) { if (typeof value.intakeDraft !== 'string') throw Error('访谈草稿格式无法读取。'); restoreIntakeState(value.intakeDraft) }
+  if (!object(value.scales) || !object(value.vendorDrafts) || !Object.values(value.vendorDrafts).every(items => Array.isArray(items) && items.every(item => object(item) && typeof item.requirementId === 'string' && typeof item.text === 'string' && ['yes','partial','no','unknown'].includes(item.commitment))) || typeof value.planningChosen !== 'boolean' || !Number.isInteger(value.furthestUnlocked) || value.furthestUnlocked < 1 || value.furthestUnlocked > 6 || (value.currentArea !== null && typeof value.currentArea !== 'string') || ![...projectSteps, 'assessment', 'vendor'].includes(value.lastWorkspacePage) || typeof value.selectedProjectRoom !== 'string') throw Error('项目草稿中的进度格式无法读取。')
+  decodeRoomPlanningSnapshot(value.planning)
+  if (value.vendorId !== undefined && !['a', 'b'].includes(value.vendorId)) throw Error('商家草稿状态无法读取。')
+  value.vendorId ??= 'a'
+  // An obsolete analysis can be rerun without losing the underlying project.
+  for (const item of s.snapshots as Snapshot[]) {
+    if (item.insight && !validRequirementInsight(item.insight, insightInput(item))) delete item.insight
+  }
+  return value as ProjectSession
+}
 function log(text: string) {
   state.events.unshift({ text, at: now() })
+  scheduleProjectSave()
 }
 function toast(message: string) {
   const el = document.querySelector('#toast')!
@@ -173,13 +368,17 @@ function routeAllowed(to: string) { syncFlow(); return canVisit(to, furthestUnlo
 function blockedHint() { return `请先完成“${navs.find(n => n[0] === projectSteps[furthestUnlocked - 1])?.[1]}”，再进入后续步骤。` }
 function navigate(to: Page) {
   if (!routeAllowed(to)) { toast(blockedHint()); return }
+  if ((to === 'assessment' || to === 'vendor') && projectSteps.includes(page as ProjectStep)) workflowReturnPage = page
+  if (to !== 'overview') lastWorkspacePage = to
   location.hash = to
   if (page === to) render()
   if (!previewFrom) window.scrollTo(0, 0)
 }
 window.addEventListener('hashchange', () => {
   if (location.hash === '#dimensions') history.replaceState(null, '', '#requirements')
-  page = (location.hash.slice(1) as Page) || 'overview'
+  const destination = (location.hash.slice(1) as Page) || 'overview'
+  if ((destination === 'assessment' || destination === 'vendor') && projectSteps.includes(page as ProjectStep)) workflowReturnPage = page
+  page = destination
   window.scrollTo(0, 0)
   render()
 })
@@ -269,6 +468,145 @@ function emptyPanel(title: string, desc: string, action: string, text: string) {
 function hasCurrentSelection() {
   return !!state.selection && state.selection.requirements.version === latest()?.version
 }
+function currentWorkflowTask() {
+  const snapshot = latest()
+  const insightSnapshot = state.snapshots.find(item => item.version === insightVersion)
+  return workflowTask({
+    page, planningStage: planning.currentStage(), recognizing: planning.model().analysisState === 'pending',
+    roomCount: planning.model().rooms.length, roomName: planning.selectedRoom()?.name,
+    requirementCount: state.requirements.length, published: !!snapshot, dirty: state.dirty,
+    contextChanged: roomContextChanged(),
+    insight: insightSnapshot ? insightSnapshot.insight ? 'complete' : insightJobs.get(insightSnapshot.version)?.status || 'error' : undefined,
+    currentProposal: !!snapshot && (['a', 'b'] as const).some(id => currentProposal(id)?.requirementVersion === snapshot.version),
+    currentSelection: hasCurrentSelection(), choosingProposal: workflowChoosingProposal,
+  })
+}
+function workflowDockInput(): WorkflowDockInput {
+  const task = page === 'clarify' && intakeSession ? intakeSession.navigation() : currentWorkflowTask()
+  if (page === 'clarify' && activeRoomWork()) { task.title = `${activeRoomWork()!.name} · ${task.title}`; if (task.nextLabel === '提交问卷，下一步') task.nextLabel = `保存${activeRoomWork()!.name}需求` }
+  return { ...task, saveText: recoveryError || saveStatus.phase === 'error' ? '保存需要处理' : hasUnsavedChanges ? '正在保存…' : '草稿自动保存', backLabel: page === 'planning' && state.requirements.length ? '查看总清单' : page === 'planning' && planning.currentStage() === 'drawing' ? '返回首页' : page === 'assessment' || page === 'vendor' ? '返回主流程' : '上一步' }
+}
+function queueWorkflowUpdate() {
+  if (workflowUpdateQueued) return
+  workflowUpdateQueued = true
+  queueMicrotask(() => {
+    workflowUpdateQueued = false
+    const dock = document.querySelector<HTMLElement>('#workflow-dock')
+    if (dock && page !== 'overview') {
+      if (dock.querySelector('[data-workflow-hint]') && !app.querySelector('.workflow-field-hint')) clearWorkflowHighlight()
+      updateWorkflowDock(dock, workflowDockInput())
+    }
+  })
+}
+function pointWorkflow(selector: string, message: string) {
+  // Comma-separated selectors are ordered fallbacks, not document-order matches.
+  // A precise field inside closed details wins over its visible parent panel.
+  const target = selector.split(',').map(part => {
+    const matches = [...app.querySelectorAll<HTMLElement>(part.trim())]
+    return matches.find(item => item.getClientRects().length > 0) || matches[0]
+  }).find(Boolean) || app.querySelector<HTMLElement>('#main-content')
+  if (target) highlightWorkflowTarget(target, message)
+}
+function navigateWithWorkflowHint(to: Page, selector: string, message: string) {
+  workflowPendingFocus = { selector, message }
+  navigate(to)
+}
+function clickWorkflowControl(selector: string) {
+  const control = app.querySelector<HTMLButtonElement>(selector)
+  if (control && !control.disabled) control.click()
+}
+async function advanceWorkflow() {
+  if (workflowAdvancing || dialog.open) return
+  clearWorkflowHighlight()
+  if (recoveryError) { pointWorkflow('.project-recovery', '先恢复或导出原草稿，再继续，避免覆盖已有内容。'); return }
+  if (!projectReady) { pointWorkflow('[data-project-save]', '正在读取已有项目，请稍等。'); return }
+  workflowAdvancing = true
+  try {
+    switch (currentWorkflowTask().action) {
+      case 'wait-planning': pointWorkflow('[data-plan-status], .planning-stage', '正在处理户型，请完成后再继续。'); break
+      case 'need-rooms': {
+        const name = app.querySelector<HTMLInputElement>('[data-mark-name]')
+        const coordinates = [...app.querySelectorAll<HTMLInputElement>('[data-mark-coord]')]
+        if (!name?.value.trim()) pointWorkflow('[data-mark-name], .plan-analysis, [data-plan-status]', '先填写房间名称和范围，再点击“添加房间”保存标注。')
+        else {
+          const [left, top, width, height] = coordinates.map(field => field.valueAsNumber)
+          const invalidIndex = coordinates.findIndex(field => !Number.isFinite(field.valueAsNumber) || !field.checkValidity())
+          const badRange = invalidIndex >= 0 ? invalidIndex : width < 2.5 || left + width > 100.1 ? 2 : height < 2.5 || top + height > 100.1 ? 3 : -1
+          if (badRange >= 0) pointWorkflow(`[data-mark-coord="${badRange}"]`, '请填写图纸内的有效范围；宽高至少 2.5%，不能超出图纸。')
+          else pointWorkflow('[data-plan-step="mark"]', '名称和范围已经填好，请点“添加房间”保存标注，再生成户型。')
+        }
+        break
+      }
+      case 'generate': clickWorkflowControl('[data-plan-step="build"]'); break
+      case 'return-model': clickWorkflowControl('[data-wall-action="back"]'); break
+      case 'enter-room': clickWorkflowControl('[data-action="plan-current-room"]'); break
+      case 'intake': {
+        const issue = await intakeSession?.advance()
+        if (issue?.message) {
+          if (issue.target?.isConnected) highlightWorkflowTarget(issue.target, issue.message)
+          else pointWorkflow('#intake-root', issue.message)
+        }
+        break
+      }
+      case 'clarify':
+        insightVersion = null
+        intakeEntry = { focus: true }
+        navigateWithWorkflowHint('clarify', '#intake-brief', state.requirements.length ? '项目背景已变化，请整理并重新确认这轮需求。' : '先写一句你的改造想法，再点下方“下一步”。')
+        break
+      case 'publish': clickWorkflowControl('[data-action="publish"]'); break
+      case 'compare': insightVersion = null; workflowChoosingProposal = false; navigate('compare'); break
+      case 'need-proposal': pointWorkflow('.proposal-samples', '先点击一张方案卡片，查看它如何回应当前需求；旧版本方案需要更新。'); break
+      case 'space': navigate('space'); break
+      case 'choose-proposal':
+        workflowChoosingProposal = true
+        if (page !== 'compare') navigateWithWorkflowHint('compare', '[data-action="select-proposal"]:not(:disabled), .proposal-samples', '请选择你要的方案，再核对待办并确认；不会自动替你选择。')
+        else pointWorkflow('[data-action="select-proposal"]:not(:disabled), .proposal-samples', '在你选择的方案下点击“查看并选择此方案”，核对待办后再确认。')
+        break
+      case 'records': navigate('records'); break
+      case 'export': clickWorkflowControl('[data-action="export"]'); break
+      case 'vendor': {
+        const blank = draftItems.every(item => !item.text.trim())
+        const missing = draftItems.find(item => item.commitment === 'yes' && !item.text.trim())
+        if (blank || missing) pointWorkflow(missing ? `[data-proposal-text="${CSS.escape(missing.requirementId)}"]` : '[data-proposal-text]', blank ? '请至少写一项具体做法，再提交方案。' : '这项标记为“已回应”，请补充具体做法。')
+        else clickWorkflowControl('[data-action="submit-vendor"]')
+        break
+      }
+      case 'assessment': {
+        const input = assessmentInput()
+        const run = state.assessments.slice().reverse().find(item => item.targetKey === assessmentTarget)
+        if (run && input && assessmentIsStale(run, input)) {
+          clickWorkflowControl('[data-action="assessment-run"]')
+          pointWorkflow('#assessment-issues', '已按最新资料重新评估，请看更新后的事项。')
+          break
+        }
+        const issue = run && blockedIssues(run, input?.proposal ? 'select' : 'publish')[0]
+        if (issue) {
+          assessmentFilter = 'all'; render()
+          pointWorkflow(`#risk-${CSS.escape(issue.id)}`, '这项问题影响确认，请按处理建议修改原需求或方案；填写安排不会自动解除阻断。')
+        } else navigate(routeAllowed(workflowReturnPage) ? workflowReturnPage : 'requirements')
+        break
+      }
+    }
+  } finally { workflowAdvancing = false; queueWorkflowUpdate() }
+}
+function previousWorkflow() {
+  if (page === 'planning' && state.requirements.length) { navigate('requirements'); return }
+  clearWorkflowHighlight()
+  if (page === 'clarify') {
+    if (intakeSession?.navigation().busy) { pointWorkflow('.intake-request-dock', '可以先取消本轮整理，再返回上一步。'); return }
+    if (intakeSession?.previous()) return
+  }
+  if (page === 'planning') {
+    if (planning.currentStage() === 'walls') { clickWorkflowControl('[data-wall-action="back"]'); return }
+    if (planning.currentStage() === 'model') { clickWorkflowControl('[data-plan-step="drawing"]'); return }
+    if (planning.currentStage() === 'building') { pointWorkflow('.planning-stage', '正在生成户型，完成后可以返回原图。'); return }
+    navigate('overview'); return
+  }
+  if (page === 'requirements' && insightVersion !== null) { insightVersion = null; render(); return }
+  if (page === 'assessment' || page === 'vendor') { navigate(routeAllowed(workflowReturnPage) ? workflowReturnPage : 'requirements'); return }
+  const index = projectSteps.indexOf(page as ProjectStep)
+  navigate(index > 0 ? projectSteps[index - 1] : 'overview')
+}
 function taskStage() {
   const revision = latest()
   if (hasCurrentSelection()) return '已记录方案选择'
@@ -286,19 +624,18 @@ function flowNavigation(home = false) {
     const index = projectSteps.indexOf(id as ProjectStep)
     const complete = index >= 0 && (index < furthestUnlocked - 1 || !!state.selection)
     const body = `${home ? icon(locked ? 'lock' : glyph, 18) : `<span class="flow-step-number">${id === 'overview' ? icon('home', 17) : id === 'assessment' ? icon(locked ? 'lock' : 'check', 16) : locked ? icon('lock', 14) : complete ? icon('check', 16) : index + 1}</span>`}<span>${text}${home ? '' : `<small>${locked ? '待解锁' : page === id ? '当前页面' : id === 'assessment' ? '随时检查' : complete ? '可回看' : '可继续'}</small>`}</span>`
-    return locked ? `<button class="${home ? 'home-locked-link' : 'nav-item is-locked'}" disabled title="${esc(blockedHint())}">${body}</button>` : `<a href="#${id}" class="${home ? '' : `nav-item ${page === id ? 'active' : ''} ${complete ? 'is-complete' : ''}`}" ${page === id ? 'aria-current="page"' : ''}>${body}</a>`
+    return locked ? `<button class="${home ? 'home-locked-link' : 'nav-item is-locked'}" data-action="guide-step" data-destination="${id}" title="${esc(blockedHint())}" aria-label="${text}，${esc(blockedHint())}">${body}</button>` : `<a href="#${id}" class="${home ? '' : `nav-item ${page === id ? 'active' : ''} ${complete ? 'is-complete' : ''}`}" ${page === id ? 'aria-current="page"' : ''}>${body}</a>`
   }).join('')
 }
 function flowGuide() {
   if (page === 'overview' || page === 'vendor' || page === 'assessment') return ''
   const index = projectSteps.indexOf(page)
   const completed = state.selection ? 6 : furthestUnlocked - 1
-  const previous = index > 0 ? projectSteps[index - 1] : 'overview'
-  return `<section class="project-progress" aria-label="项目进度"><div class="project-progress-top"><span>第 ${index + 1} / 6 步 · <b>${navs.find(n => n[0] === page)?.[1]}</b></span><span>已完成 ${completed} / 6 步</span></div><progress value="${completed}" max="6" aria-label="整体项目完成进度"></progress><div class="project-progress-guide"><p>${stepInstructions[page]}</p><a href="#${previous}">返回${index > 0 ? '上一步' : '首页'}</a></div></section>`
+  return `<section class="project-progress" aria-label="项目进度"><div class="project-progress-top"><span>第 ${index + 1} / 6 步 · <b>${navs.find(n => n[0] === page)?.[1]}</b></span><span>已完成 ${completed} / 6 步</span></div><progress value="${completed}" max="6" aria-label="整体项目完成进度"></progress></section>`
 }
 function shell(content: string) {
   if (page === 'overview') return content
-  return html`<div class="lucid-app page-${page}${page === 'planning' ? ' planning-page' : ''}">
+  return html`<div class="lucid-app has-workflow-dock page-${page}${page === 'planning' ? ' planning-page' : ''}">
     <div class="ambient-scene" aria-hidden="true">
       <div></div>
       <span></span>
@@ -311,7 +648,7 @@ function shell(content: string) {
         >
         <div class="project-switch">
           <span class="project-dot"></span>
-          <div><b>我的第一个家</b><small>厨房改造 · 示意项目</small></div>
+          <div><b>我的第一个家</b><small data-project-scope>${esc(projectScope())} · ${planning.model().drawing ? '我的户型' : '演示户型'}</small><small class="project-save-status" data-project-save aria-live="polite">${esc(projectSaveText())}</small></div>
         </div>
         <div class="header-actions">
           <button class="icon-button" data-action="about" aria-label="关于此演示">
@@ -324,12 +661,13 @@ function shell(content: string) {
       </nav>
     </header>
     <main id="main-content" class="studio-main${page === 'planning' ? ' plan-main' : ''}">
-      ${flowGuide()}${content}
+      ${recoveryNotice()}${flowGuide()}${content}
     </main>
     <footer class="app-footer">
       <span>安居有数 · Dream Defined. Living Refined.</span>
-      <div><i class="project-dot"></i>演示模式 · 刷新后重新开始</div>
+      <div><i class="project-dot"></i><span data-project-save>${esc(projectSaveText())}</span> · 商家方案为演示</div>
     </footer>
+    ${renderWorkflowDock(workflowDockInput())}
   </div>`
 }
 
@@ -346,8 +684,8 @@ function overview() {
       </a>
       <nav class="home-navigation" aria-label="快捷导航">
         <a href="#planning">空间规划</a>
-        ${routeAllowed('clarify') ? '<a href="#clarify">需求共创</a>' : '<span class="home-nav-locked" aria-disabled="true">需求共创</span>'}
-        ${routeAllowed('compare') ? '<a href="#compare">方案对比</a>' : '<span class="home-nav-locked" aria-disabled="true">方案对比</span>'}
+        ${routeAllowed('clarify') ? '<a href="#clarify">需求共创</a>' : '<button class="home-nav-guided" data-action="guide-step" data-destination="clarify">需求共创<small>先选择空间</small></button>'}
+        ${routeAllowed('compare') ? '<a href="#compare">方案对比</a>' : '<button class="home-nav-guided" data-action="guide-step" data-destination="compare">方案对比<small>先确认并发布需求</small></button>'}
       </nav>
       <details class="home-menu">
         <summary>项目工作台${icon('plus', 16)}</summary>
@@ -363,6 +701,7 @@ function overview() {
       </details>
     </header>
     <main id="main-content">
+      ${recoveryNotice()}
       <section id="home-content" class="home-hero" data-home-scene data-scene="residence" aria-labelledby="home-title" tabindex="-1">
         <div class="home-atmosphere" aria-hidden="true"></div>
         <div class="home-art" data-home-canvas aria-label="住宅三维搭建演示">
@@ -380,12 +719,13 @@ function overview() {
             <p>把生活想法说清楚，让装修方案有据可循。</p>
           </div>
           <div class="home-entry">
-            <button class="home-start" data-action="go-planning">
+            <button class="home-start" data-action="${hasProjectDraft() ? 'resume-project' : 'go-planning'}">
               <span class="home-start-symbol">${icon('arrow', 25)}</span>
-              <span><b>开始硬装规划</b><small>选择房间，聊聊你想要的家</small></span>
+              <span><b>${hasProjectDraft() ? '继续我的项目' : '开始硬装规划'}</b><small>${hasProjectDraft() ? `${esc(projectScope())} · ${esc(navs.find(item => item[0] === resumePage())?.[1] || '空间选择')}` : '选择房间，聊聊你想要的家'}</small></span>
               ${icon('chevron', 20)}
             </button>
             <button class="home-secondary" data-action="${reqs.length ? 'go-requirements' : 'demo'}">${reqs.length ? '继续查看我的需求' : '先体验一个完整案例'}${icon('arrow', 15)}</button>
+            ${hasProjectDraft() ? `<small class="home-resume-meta" data-project-save>${esc(projectSaveText())}</small>` : ''}
           </div>
         </div>
         <div class="home-hero-foot">
@@ -393,6 +733,15 @@ function overview() {
           <button type="button" class="home-scroll" data-home-scroll>了解规划流程<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 4v16m-6-6 6 6 6-6" /></svg></button>
           <span class="home-scene-caption" data-home-caption>一座家，逐渐成形</span>
         </div>
+      </section>
+      <section class="home-outcome" aria-labelledby="home-outcome-title">
+        <header><h2 id="home-outcome-title">把一句想法，变成能讨论的方案。</h2><p>用厨房的小例子，看看最后会得到什么。</p></header>
+        <div class="home-outcome-example">
+          <article><p>你的生活想法</p><h3>“厨房想好打理，也想加一台洗碗机。”</h3><p>先说使用习惯，不必提前知道施工术语。</p></article>
+          <article><p>一起确认的需求</p><h3>安装位、供水、排水和电源，逐项说清楚。</h3><p>明确必须满足的内容，保留型号、尺寸等现场待确认事项。</p></article>
+          <article><p>看得懂的方案差异</p><h3>方案 A 漏了供排水说明，需要补充。</h3><p>对照同一份清单看遗漏和冲突，再把结果带去讨论。</p></article>
+        </div>
+        <footer><span>以上为演示示例</span><button class="home-text-link" data-action="demo">打开案例，看看完整对比${icon('arrow', 18)}</button></footer>
       </section>
       <section class="home-process" id="home-process" aria-labelledby="home-process-title" tabindex="-1">
         <div class="home-process-intro">
@@ -423,7 +772,7 @@ function overview() {
         ${state.events.length ? html`<ol class="home-events">${state.events.slice(0, 3).map(e => html`<li><p>${esc(e.text)}</p><time>${stamp(e.at)}</time></li>`).join('')}</ol>` : ''}
       </section>
     </main>
-    <footer class="home-footer"><span>安居有数</span><p>Dream Defined. Living Refined.</p><small>演示模式 · 刷新后重新开始</small></footer>
+    <footer class="home-footer"><span>安居有数</span><p>Dream Defined. Living Refined.</p><small data-project-save>${esc(projectSaveText())}</small></footer>
   </div>`
 }
 
@@ -495,13 +844,24 @@ function clarify() {
   return html`${heading('一步一步，说清你想要的家。', '按问卷填写即可。不懂的专业问题可以先留待确认。')}${intakeWithSpaceMarkup(planning.model())}`
 }
 function requirements() {
+  const insightSnapshot = state.snapshots.find(snapshot => snapshot.version === insightVersion)
+  if (insightSnapshot) {
+    const job = insightJobs.get(insightSnapshot.version)
+    return renderRequirementInsight({
+      requirements: insightSnapshot.requirements, version: insightSnapshot.version,
+      status: insightSnapshot.insight ? 'complete' : job?.status || 'error',
+      result: insightSnapshot.insight?.data, model: insightSnapshot.insight?.meta.model,
+      error: job?.error || '本轮分析尚未完成，可以重新分析。',
+      stale: state.dirty || insightSnapshot.version !== latest()?.version,
+    })
+  }
   if (!state.requirements.length) return html`<div class="hub-root" data-variant="lucid">
     ${heading('我的需求', '把改造要求、项目背景和待确认信息放在一起。')}
     ${emptyPanel('先把想法整理成需求', '从一句生活化描述开始，AI 会拆分范围并补问缺少的信息。', 'go-clarify', '开始需求共创')}
     <details class="requirements-extras"><summary>项目背景与补充记录</summary>${renderProjectContext(projectContext())}${renderLegacyArchive(scales, ownerDimensions, merchantDimensions)}</details>
   </div>`
   const snap = latest()
-  return html`<div class="hub-root" data-variant="lucid">${heading('我的需求', '逐项检查描述与重要程度，确认后让商家围绕同一份需求回应。', btn(`${icon('plus', 16)}补充需求`, 'add-requirement', 'secondary-button'))}
+  return html`<div class="hub-root" data-variant="lucid">${roomOverview()}${heading('我的需求', '各房间已保存需求在此统一汇总；确认后一起提交。', btn(`${icon('plus', 16)}补充需求`, 'add-requirement', 'secondary-button'))}
     <div class="document-toolbar">
       <div>
         <span class="status ${state.dirty || !snap ? 'partial' : 'responded'}"
@@ -512,13 +872,13 @@ function requirements() {
         >
       </div>
       <div>
-        ${btn('查看风险评估', 'assessment-open', 'secondary-button', 'data-target="draft"')}${snap ? btn('查看版本', 'history', 'text-button') : ''}${projectContextChanged(projectContext(), state.intakeDocument) && (state.dirty || !snap) ? btn('先更新需求草稿', 'go-clarify') : btn(state.dirty || !snap ? '提交需求，等待方案' : '查看商家方案', state.dirty || !snap ? 'publish' : 'go-compare')}
+        ${snap ? btn(snap.insight ? '查看需求图谱' : insightJobs.get(snap.version)?.status === 'loading' ? '查看 Flash 分析进度' : 'Flash 需求分析', 'insight-open', 'secondary-button') : ''}${btn('查看风险评估', 'assessment-open', 'secondary-button', 'data-target="draft"')}${snap ? btn('查看版本', 'history', 'text-button') : ''}${roomContextChanged() && (state.dirty || !snap) ? btn('先更新需求草稿', 'go-clarify') : btn(state.dirty || !snap ? '提交需求，等待方案' : '查看商家方案', state.dirty || !snap ? 'publish' : 'go-compare')}
       </div>
     </div>
     <div class="notice">
       ${icon('info', 18)}设备尺寸与现场接口可以留待核实。发布代表开始方案协作，不代表施工条件已经确定。
     </div>
-    ${projectContextChanged(projectContext(), state.intakeDocument) ? '<div class="notice warn">项目背景已改变或与原梳理记录不同。请重新整理并采用草稿后再发布新版本；原发布版本保持不变，仍可用于方案对比。</div>' : ''}
+    ${roomContextChanged() ? '<div class="notice warn">项目背景已改变或与原梳理记录不同。请重新整理并采用草稿后再发布新版本；原发布版本保持不变，仍可用于方案对比。</div>' : ''}
     <div class="hub-workspace">
     <section class="requirement-list">
       ${state.requirements
@@ -608,7 +968,9 @@ function compare() {
       stale ||
       fs.some((f) => f.find((x) => x.requirementId === r.id)?.status !== 'responded'),
   )
-  return html`${heading('每一份方案，如何回应你', '相同的需求基准，让差异清楚可见。', btn(`${icon('edit', 16)}商家提交 / 修订`, 'go-vendor', 'secondary-button'))}${!hasCurrent ? renderMerchantWaiting() : ''}${samples}${state.dirty ? '<p class="notice warn">你有尚未发布的需求修改。当前仍按已发布版本比较。</p>' : ''}${stale ? `<div class="notice warn">${icon('info', 18)}需求已更新到 R${snap.version}，商家方案还在引用旧版。${btn('按新需求重新提交', 'go-vendor', 'text-button')}</div>` : ''}
+  const insights = comparisonInsights(snap.requirements, state.proposals, snap.version)
+  const summary = hasCurrent ? `<section class="comparison-insights" aria-labelledby="comparison-insights-title"><header><h2 id="comparison-insights-title">先看这些关键差异</h2><p>按已发布需求 R${snap.version} 核对，优先显示必须项冲突与遗漏。点一项查看原文。</p></header>${insights.length ? `<ol>${insights.map(item => `<li data-kind="${item.kind}"><button data-action="comparison-focus" data-id="${esc(item.requirementId)}"><span class="insight-kind">${item.kind === 'must-conflict' ? '优先处理' : item.kind === 'missing' ? '需要补充' : '需要核对'}</span><strong>${esc(item.title)}</strong><p>${esc(item.summary)}</p><small>下一步：${esc(item.action)}</small></button></li>`).join('')}</ol>` : '<p>当前规则未发现新的差异；仍需核对原文及现场待确认事项。</p>'}</section>` : ''
+  return html`${heading('每一份方案，如何回应你', '相同的需求基准，让差异清楚可见。', btn(`${icon('edit', 16)}商家提交 / 修订`, 'go-vendor', 'secondary-button'))}${!hasCurrent ? renderMerchantWaiting() : ''}${state.dirty ? '<p class="notice warn">你有尚未发布的需求修改。当前仍按已发布版本比较。</p>' : ''}${stale ? `<div class="notice warn">${icon('info', 18)}需求已更新到 R${snap.version}，商家方案还在引用旧版。${btn('按新需求重新提交', 'go-vendor', 'text-button')}</div>` : ''}${summary}<details class="proposal-reference" ${samplePreview ? 'open' : ''}><summary>查看风格参考与演示方案</summary>${samples}</details>
     <div class="compare-toolbar" id="proposal-comparison">
       <div class="segmented">
         <button data-filter="all" class="${filter === 'all' ? 'selected' : ''}">全部需求</button
@@ -658,7 +1020,7 @@ function compare() {
             reqs
               .map(
                 (r) =>
-                  html`<tr>
+                  html`<tr data-comparison-row="${esc(r.id)}" tabindex="-1">
                     <td>
                       <span class="req-id"
                         >${esc(r.id)} · ${r.priority === 'must' ? '必须满足' : '优先偏好'}</span
@@ -715,7 +1077,7 @@ function vendor() {
           text: '',
         })),
     )
-  return html`${heading('商家方案工作区', '此处模拟商家操作；提交仅保留在本轮演示。', btn('返回方案对比', 'go-compare', 'secondary-button'))}
+  return html`${heading('商家方案工作区', '此处模拟商家操作，内容随项目保存在此浏览器。', btn('返回方案对比', 'go-compare', 'secondary-button'))}
     <div class="document-toolbar">
       <div class="segmented">
         <button data-vendor="a" class="${vendorId === 'a' ? 'selected' : ''}">A · 木序设计</button
@@ -783,9 +1145,11 @@ ${esc(item?.text || '')}</textarea>
 }
 function space() {
   const r = rooms.find((r) => r.id === selectedRoom)!
-  const intro = html`${heading('把装修，一层层看清楚。', '从隐藏工程到最终居住，用同一套户型理解每一步。')}
-    <div class="space-mode-switch" role="group" aria-label="空间预览方式"><button data-action="space-engineering" aria-pressed="${spaceMode === 'engineering'}">工程分层</button><button data-action="space-rooms" aria-pressed="${spaceMode === 'rooms'}">房间与线路</button></div>`
+  const intro = html`${heading(spaceMode === 'project' ? '在你的空间里，核对每一条需求。' : spaceMode === 'walls' ? '在当前户型中，查看墙体调整意向。' : '了解装修构成与工程示意。', spaceMode === 'project' || spaceMode === 'walls' ? '这里沿用空间选择中的户型，方便对应房间与需求。' : '此处使用独立教学示意，不是你上传的户型或商家施工方案。')}
+    <div class="space-mode-switch" role="group" aria-label="空间预览方式"><button data-action="space-project" aria-pressed="${spaceMode === 'project'}">我的户型与需求</button><button data-action="space-walls" aria-pressed="${spaceMode === 'walls'}">当前户型 · 墙体调整</button><button data-action="space-engineering" aria-pressed="${spaceMode === 'engineering'}">了解装修构成</button><button data-action="space-rooms" aria-pressed="${spaceMode === 'rooms'}">房间与线路示意</button></div>`
+  if (spaceMode === 'project') return intro + renderProjectSpace(planning.model(), state.dirty ? state.requirements : latest()?.requirements ?? state.requirements, selectedProjectRoom, latest()?.version, state.dirty) + `<div class="project-space-guidance"><p>对照房间核对需求后，可以返回方案对比继续选择。</p>${btn('返回方案对比', 'go-compare', 'secondary-button')}</div>`
   if (spaceMode === 'engineering') return intro + renderEngineeringSpace()
+  if (spaceMode === 'walls') return intro + wallSpace.render(planning.model(), '返回我的户型')
   return html`${intro}
     <div class="space-toolbar">
       <div class="room-tabs">
@@ -862,7 +1226,7 @@ function assessmentInput(key = assessmentTarget): AssessmentInput | undefined {
   return { targetKey: key, targetLabel: target.label, requirementVersion: snapshot?.version ?? null, latestVersion: latest()?.version ?? null,
     requirements: snapshot?.requirements ?? state.requirements, proposal, latestProposalId: proposal ? currentProposal(proposal.vendorId)?.id : undefined, document: snapshot?.intakeDocument ?? (key === 'draft' ? state.intakeDocument : undefined),
     context: snapshot?.projectContext ?? (key === 'draft' ? projectContext() : undefined),
-    contextChanged: key === 'draft' && projectContextChanged(projectContext(), state.intakeDocument),
+    contextChanged: key === 'draft' && roomContextChanged(),
     responses: proposal ? findings(proposal) : [], notes: state.assessmentNotes }
 }
 function runAssessment(key = assessmentTarget) {
@@ -884,6 +1248,7 @@ function assessment() {
   const input = assessmentInput()!
   const run = state.assessments.slice().reverse().find(r => r.targetKey === assessmentTarget) ?? runAssessment()!
   return heading('风险评估', '看清依据，处理问题，再做下一步决定。') + renderAssessment(run, {
+    persistent: true,
     targets, stale: assessmentIsStale(run, input), filter: assessmentFilter,
     canSelect: !!input.proposal && input.proposal.id === input.latestProposalId && input.requirementVersion === latest()?.version,
     isDraft: assessmentTarget === 'draft',
@@ -956,6 +1321,10 @@ function records() {
 
 
 function render() {
+  disposeWorkflowDock?.()
+  disposeWorkflowDock = undefined
+  disposeInsight?.()
+  disposeInsight = undefined
   syncFlow()
   if (!canVisit(page, furthestUnlocked)) {
     page = projectSteps[furthestUnlocked - 1]
@@ -963,6 +1332,8 @@ function render() {
     toast(blockedHint())
   }
   disposeEngineering?.()
+  disposeWallSpace?.()
+  disposeWallSpace = undefined
   disposeEngineering = undefined
   if (page !== 'planning') { homeArrival?.dispose(); homeArrival = undefined }
   disposeHome?.()
@@ -974,11 +1345,24 @@ function render() {
   intakeSession = undefined
   house?.dispose()
   house = undefined
-  const pages = { overview, planning: planning.render, clarify, requirements, compare, assessment, space, records, vendor }
+  const pages = { overview, planning: () => roomOverview() + planning.render(), clarify, requirements, compare, assessment, space, records, vendor }
   if (!(page in pages)) page = 'overview'
   app.innerHTML = shell(pages[page]())
+  const workflowDock = app.querySelector<HTMLElement>('#workflow-dock')
+  if (workflowDock) disposeWorkflowDock = mountWorkflowDock(workflowDock)
+  const insightRoot = app.querySelector<HTMLElement>('.requirement-insight')
+  if (insightRoot) disposeInsight = mountRequirementInsight(insightRoot)
   for (const button of app.querySelectorAll<HTMLButtonElement>('button[data-action^="go-"]')) {
-    if (!routeAllowed(button.dataset.action!.slice(3))) { button.disabled = true; button.title = blockedHint() }
+    const destination = button.dataset.action!.slice(3)
+    if (!routeAllowed(destination)) {
+      button.dataset.action = 'guide-step'
+      button.dataset.destination = destination
+      button.title = blockedHint()
+      const hint = document.createElement('small')
+      hint.className = 'flow-entry-hint'
+      hint.textContent = furthestUnlocked === 1 ? '先选择空间即可开始' : blockedHint()
+      button.append(hint)
+    }
   }
   if (page === 'overview') disposeHome = mountHomeScene(document.querySelector<HTMLElement>('.home-page')!, (keyboard, frame) => {
     homeArrival?.dispose()
@@ -1002,23 +1386,34 @@ function render() {
     const area = planningEntry
     planningEntry = undefined
     intakeSession = mountIntake(document.querySelector<HTMLElement>('#intake-root')!, {
-      variant: 'lucid', questionnaire: true, initialBrief: state.brief, existingCount: state.requirements.length,
+      variant: 'lucid', questionnaire: true, externalNavigation: true, onNavigationChange: queueWorkflowUpdate, initialBrief: activeRoomWork()?.document?.brief || (state.activeRoomId ? '' : state.brief), existingCount: activeRoomWork()?.requirements.length ?? state.requirements.length,
       projectContext: contextAnswers(projectContext()),
       planningArea: area,
-      storage: demoIntakeStorage,
+      storage: activeRoomWork() ? ((room: RoomWork) => ({ getItem: () => room.draft, setItem: (_key: string, value: string) => { room.draft = value; scheduleProjectSave() } }))(activeRoomWork()!) : demoIntakeStorage,
+      storageStatus: projectSaveText,
       spatialModel: planning.model(),
       onSpatialFocus: intakePreview.update,
       onFirstExpression: intakePreview.acknowledgeBrief,
       onNotice: toast,
-      onAdopt: (requirements, document) => {
+      onAdopt: async (requirements, document) => {
         if (!requirements.length) { toast('请先确认至少一条本次需求。'); return }
-        state.brief = document.brief
-        state.requirements = clone(requirements)
-        state.intakeDocument = clone(document)
-        state.dirty = true
-        log('采用新的需求共创草稿，等待用户发布；已有版本保持不变')
-        navigate('requirements')
-        toast('需求草稿已采用，请核对后发布。')
+        insightVersion = null
+        const room = activeRoomWork()
+        if (room) {
+          const saved = saveRoomRequirements(state.requirements, room, requirements, document)
+          state.requirements = saved.requirements
+          Object.assign(room, saved.room)
+          state.intakeDocument = combinedRoomDocument(state.roomWork!)
+          state.brief = state.roomWork!.filter(item => item.document).map(item => `${item.name}：${item.document!.brief}`).join('\n')
+          state.dirty = true
+          log(`保存${room.name}需求，保留其他房间及历史版本`)
+          await saveProject()
+          navigate('planning')
+          toast(`${room.name}已保存，可以继续其他房间或查看总清单。`)
+        } else {
+          state.brief = document.brief; state.requirements = clone(requirements); state.intakeDocument = clone(document); state.dirty = true
+          navigate('requirements')
+        }
       },
     })
     const entry = intakeEntry
@@ -1042,6 +1437,8 @@ function render() {
       navigation.clientWidth / 2 +
       activeNavigation.clientWidth / 2
   }
+  if (page === 'space' && spaceMode === 'project') highlightProjectRoom(app, selectedProjectRoom)
+  if (page === 'space' && spaceMode === 'walls') disposeWallSpace = wallSpace.mount(document.querySelector<HTMLElement>('.wall-explorer')!, () => { spaceMode = 'project'; render() })
   if (page === 'space' && spaceMode === 'engineering') disposeEngineering = mountEngineeringSpace(document.querySelector<HTMLElement>('.engineering')!)
   if (page === 'space' && spaceMode === 'rooms') {
     const canvas = document.querySelector<HTMLElement>('#house-canvas')!
@@ -1066,6 +1463,14 @@ function render() {
     )
     if (page === 'space' && selectedRoute) house.selectRoute(selectedRoute)
   }
+  if (page !== 'overview') lastWorkspacePage = page
+  queueWorkflowUpdate()
+  if (workflowPendingFocus) {
+    const { selector, message } = workflowPendingFocus
+    workflowPendingFocus = null
+    pointWorkflow(selector, message)
+  }
+  scheduleProjectSave()
 }
 function updateSpacePanel() {
   const room = rooms.find((r) => r.id === selectedRoom)!
@@ -1084,6 +1489,7 @@ dialog.addEventListener('click', (e) => {
   if (e.target === dialog) dialog.close()
 })
 function showAdoptedIntake() {
+  if (state.roomWork?.length) { navigate('planning'); toast('请选择房间查看或继续对应的共创记录。'); return }
   if (!state.intakeDocument) return
   showDialog('已采用的需求共创文档', adoptedIntakeHtml(state.intakeDocument), btn('继续当前访谈', 'continue-intake', 'secondary-button') + btn('用此文档替换访谈草稿', 'restore-adopted-intake'))
 }
@@ -1101,6 +1507,37 @@ function download(name: string, body: string, type: string) {
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+function previewProjectReport() {
+  dialog.close()
+  const frame = document.createElement('iframe')
+  frame.className = 'project-report-frame'
+  frame.title = '项目沟通报告'
+  frame.setAttribute('sandbox', 'allow-same-origin allow-modals')
+  frame.srcdoc = renderProjectReport({
+    projectName: '我的第一个家', scope: [...new Set(state.requirements.map(req => req.room))].join('、') || projectScope(), generatedAt: now(),
+    roomGroups: state.roomWork?.map(room => ({ id: room.id, name: room.name, requirementIds: room.requirements.map(req => req.id), hasDraftChanges: !!room.draft && room.draft !== room.savedDraft })),
+    requirements: state.requirements, requirementVersion: latest()?.version ?? null,
+    proposals: state.proposals, snapshots: state.snapshots, dirty: state.dirty,
+    brief: state.brief, projectContext: projectContext(), floorplanModel: planning.model(),
+    selectedRoomId: selectedProjectRoom === 'all' ? null : selectedProjectRoom,
+    selection: state.selection, assessments: state.assessments, events: state.events,
+  })
+  const oldOverflow = document.body.style.overflow
+  document.body.style.overflow = 'hidden'
+  const closeReport = () => { frame.remove(); document.body.style.overflow = oldOverflow; document.querySelector<HTMLElement>('[data-action="export"]')?.focus() }
+  frame.addEventListener('load', () => {
+    const report = frame.contentDocument
+    if (!report) return
+    const close = report.createElement('button')
+    close.type = 'button'; close.textContent = '返回项目'; close.dataset.reportClose = ''
+    close.addEventListener('click', closeReport)
+    report.querySelector('.report-toolbar')?.prepend(close)
+    report.querySelector('[data-report-print]')?.addEventListener('click', () => { frame.contentWindow?.focus(); frame.contentWindow?.print() })
+    report.addEventListener('keydown', event => { if (event.key === 'Escape') closeReport() })
+    close.focus()
+  })
+  document.body.append(frame)
 }
 function showProposalSelection(p: Proposal) {
       const pending = selectionPending(p)
@@ -1122,13 +1559,19 @@ function selectionPending(p: Proposal) {
       .map((r) => `${r.id}：${r.pending.join('、')}`),
   ]
 }
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
   const anchor = (e.target as Element).closest<HTMLAnchorElement>('a[href^="#"]')
   const destination = anchor?.getAttribute('href')?.slice(1)
   if (destination && (projectSteps.includes(destination as ProjectStep) || destination === 'vendor' || destination === 'assessment') && !routeAllowed(destination)) { e.preventDefault(); toast(blockedHint()); return }
   const target = (e.target as HTMLElement).closest<HTMLElement>('button,a[data-action]')
   if (!target) return
   const action = target.dataset.action
+  if (target.dataset.projectRoom) {
+    selectedProjectRoom = target.dataset.projectRoom
+    render()
+    document.querySelector<HTMLElement>(`[data-project-room="${CSS.escape(selectedProjectRoom)}"]`)?.focus({ preventScroll: true })
+    return
+  }
   if (target.dataset.assessmentFilter) {
     assessmentFilter = target.dataset.assessmentFilter as Dimension | 'all'
     render()
@@ -1162,12 +1605,63 @@ document.addEventListener('click', (e) => {
   }
   if (!action) return
   if (action.startsWith('go-')) {
+    if (dialog.open) dialog.close()
     draftItems = []
     navigate(action.slice(3) as Page)
     return
   }
   const id = target.dataset.id
   switch (action) {
+    case 'room-work-open': {
+      const room = planning.model().rooms.find(room => room.id === id) || state.roomWork?.find(room => room.id === id)
+      enterRoomWork(id!, room?.name || '全屋与公共需求'); break
+    }
+    case 'workflow-next': await advanceWorkflow(); break
+    case 'workflow-back': previousWorkflow(); break
+    case 'resume-project': navigate(resumePage()); break
+    case 'guide-step': {
+      const requested = target.dataset.destination as Page
+      if (routeAllowed(requested)) { navigate(requested); break }
+      const next = projectSteps[furthestUnlocked - 1]
+      toast(`${navs.find(item => item[0] === requested)?.[1] || '此功能'}将在完成前面的步骤后开放，先继续${navs.find(item => item[0] === next)?.[1]}。`)
+      navigate(next)
+      break
+    }
+    case 'comparison-focus': {
+      filter = 'all'; render()
+      const row = document.querySelector<HTMLElement>(`[data-comparison-row="${CSS.escape(id || '')}"]`)
+      row?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
+      row?.focus({ preventScroll: true })
+      break
+    }
+    case 'project-space-need': {
+      const req = (state.dirty ? state.requirements : latest()?.requirements ?? state.requirements).find(item => item.id === id)
+      if (req) showDialog(`${esc(req.id)} · ${esc(req.title)}`, `<p>${esc(req.description)}</p><p>关联空间：${esc(req.intake?.areas.join('、') || req.room)}</p><p>待确认：${esc(req.pending.join('；') || '未记录')}</p>`, btn('返回需求清单', 'go-requirements', 'secondary-button') + btn('关闭', 'close-dialog'))
+      break
+    }
+    case 'retry-project': await initializeProject(); break
+    case 'save-project': await saveProject(); break
+    case 'export-recovery':
+      try { download('安居有数原始草稿备份.json', JSON.stringify(await projectStore.readRaw(), null, 2), 'application/json') }
+      catch { toast('暂时无法读取原记录，请检查浏览器存储设置后重试。') }
+      break
+    case 'insight-open': {
+      const snapshot = latest()
+      if (snapshot) void startRequirementInsight(snapshot)
+      break
+    }
+    case 'insight-retry': {
+      const snapshot = state.snapshots.find(item => item.version === insightVersion)
+      if (snapshot) void startRequirementInsight(snapshot)
+      break
+    }
+    case 'insight-back':
+      insightVersion = null; render()
+      document.querySelector<HTMLElement>('[data-action="insight-open"]')?.focus()
+      break
+    case 'insight-continue':
+      insightVersion = null; navigate('compare')
+      break
     case 'assessment-dialog': dialog.close(); openAssessment(`proposal:${id}`); break
     case 'assessment-open': openAssessment(target.dataset.target || 'draft'); break
     case 'assessment-first':
@@ -1209,17 +1703,17 @@ document.addEventListener('click', (e) => {
       break
     }
     case 'scroll-comparison': e.preventDefault(); document.querySelector('#proposal-comparison')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); break
+    case 'space-project':
     case 'space-engineering':
     case 'space-rooms':
-      spaceMode = action === 'space-engineering' ? 'engineering' : 'rooms'
+    case 'space-walls':
+      spaceMode = action === 'space-project' ? 'project' : action === 'space-engineering' ? 'engineering' : action === 'space-walls' ? 'walls' : 'rooms'
       render()
       break
     case 'plan-current-room':
     case 'plan-whole-home':
-      planningChosen = true
       previewFrom = captureFloorplanHandoff()
-      planningEntry = action === 'plan-current-room' ? planning.selectedRoom()?.name : null
-      navigate('clarify')
+      enterRoomWork(action === 'plan-current-room' ? planning.selectedRoom()!.id : 'whole-home', action === 'plan-current-room' ? planning.selectedRoom()!.name : '全屋与公共需求')
       break
     case 'close-dialog':
       dialog.close()
@@ -1227,7 +1721,8 @@ document.addEventListener('click', (e) => {
     case 'about':
       showDialog(
         '关于安居有数',
-        `<p lang="en">Dream Defined. Living Refined.</p><p>这是可交互的网页 MVP，支持多区域 AI 需求共创、清单确认与版本发布；商家提交、核对和选择保留演示流程。</p><dl class="about-list"><dt>数据保存</dt><dd>需求、方案和 AI 草稿仅保留在本轮。刷新或重新打开会清空，可先导出项目。</dd><dt>AI 接入</dt><dd>需求共创已接入 AI，可按全局、区域和公共项拆分并追问；商家方案页面仍使用演示规则，不构成专业审查。</dd><dt>空间模型</dt><dd>固定示意户型与路线，不能用作实际施工图。</dd></dl>`,
+        `<p lang="en">Dream Defined. Living Refined.</p><p>支持多区域 AI 需求共创、清单确认与版本发布；商家提交、核对和选择保留演示流程。</p><dl class="about-list"><dt>数据保存</dt><dd>需求、访谈、户型和墙体标注自动保存在此浏览器。使用同一地址重新打开即可继续；不会同步到其他设备，清除浏览器数据会删除草稿。可导出报告与完整项目备份。</dd><dt>AI 接入</dt><dd>需求共创已接入 AI，上传户型图会发送至 AI 识别。商家方案仍为演示，不会发送给真实商家。</dd><dt>空间模型</dt><dd>默认关联当前项目户型与需求；工程构成与线路是独立教学示意，不能用作施工图。</dd></dl>`,
+        btn('清除本机草稿', 'reset', 'text-button'),
       )
       break
     case 'sample-brief':
@@ -1282,7 +1777,7 @@ document.addEventListener('click', (e) => {
       navigate('requirements')
       break
     case 'demo':
-      if (state.requirements.length)
+      if (hasProjectDraft())
         showDialog(
           '载入完整演示',
           `<p>这会替换当前本机项目。你可以先导出项目留存。</p>`,
@@ -1296,22 +1791,28 @@ document.addEventListener('click', (e) => {
       break
     case 'reset':
       showDialog(
-        '重置本机演示项目',
-        `<p>将清除本轮的需求、AI 草稿、方案和确认记录。建议先导出项目。</p>`,
+        '清除本机项目草稿',
+        `<p>将清除此浏览器保存的需求、访谈、户型图片、墙体标注、方案和确认记录。清除后无法恢复，建议先导出完整项目。</p>`,
         btn('取消', 'close-dialog', 'secondary-button') +
           btn('确认重置', 'confirm-reset', 'danger'),
       )
       break
     case 'confirm-reset':
+      projectReady = false; clearTimeout(saveTimer)
+      try { await projectStore.clear() } catch { projectReady = !recoveryError; toast('清除失败，原草稿保持不变。'); break }
+      cancelInsightJobs()
+      workflowChoosingProposal = false
       planning.reset()
       intakeDraft = null
       state = empty()
       planningChosen = false; furthestUnlocked = 1; samplePreview = null
       vendorDrafts = {}
       scales = {}
+      currentArea = null; lastWorkspacePage = 'planning'; selectedProjectRoom = 'all'; spaceMode = 'project'; vendorId = 'a'; draftItems = []
+      recoveryError = ''; lastSavedFingerprint = ''; hasUnsavedChanges = false; projectReady = true
       dialog.close()
       navigate('overview')
-      toast('已重置当前演示项目')
+      toast('本机草稿已清除，可以开始新的项目。')
       break
     case 'hub-locate': {
       const row = document.querySelector<HTMLElement>(`[data-requirement-id="${CSS.escape(id || '')}"]`)
@@ -1319,10 +1820,12 @@ document.addEventListener('click', (e) => {
       break
     }
     case 'add-requirement':
+      if (state.roomWork?.length) { navigateWithWorkflowHint('planning', '.room-work-overview', '请选择要补充需求的房间，或选择全屋与公共需求。'); break }
       if (state.intakeDocument) { intakeEntry = { focus: true }; navigate('clarify'); break }
       requirementForm()
       break
     case 'edit-requirement':
+      { const owner = state.roomWork?.find(room => room.requirements.some(req => req.id === id)); if (owner) { enterRoomWork(owner.id, owner.name); break } }
       if (state.requirements.find(r => r.id === id)?.intake && state.intakeDocument) { showAdoptedIntake(); break }
       requirementForm(id)
       break
@@ -1342,15 +1845,16 @@ document.addEventListener('click', (e) => {
       navigate('clarify')
       break
     case 'publish':
-      if (projectContextChanged(projectContext(), state.intakeDocument)) { toast('项目背景已改变，请先重新整理并采用草稿。'); navigate('clarify'); break }
+      if (roomContextChanged()) { toast('项目背景已改变，请先重新整理并采用草稿。'); navigate('clarify'); break }
       showDialog(
         '确认发布需求',
-        `<p>将发布 <b>R${(latest()?.version || 0) + 1}</b>，共 ${state.requirements.length} 条需求。商家将以这个版本制作方案。</p><h3>仍需确认</h3><ul>${state.requirements.flatMap((r) => r.pending.map((p) => html`<li>${esc(r.id)} · ${esc(p)}</li>`)).join('') || '<li>当前没有记录待确认事项。</li>'}</ul><p class="muted">这些待办不会因发布而自动消失。历史版本保持不变。</p>`,
+        `<p>将发布 <b>R${(latest()?.version || 0) + 1}</b>，共 ${state.requirements.length} 条需求。商家将以这个版本制作方案。</p><p>本次只提交各房间已经保存的需求；进行中的访谈和修改仍保留在对应房间。</p><h3>仍需确认</h3><ul>${state.requirements.flatMap((r) => r.pending.map((p) => html`<li>${esc(r.id)} · ${esc(p)}</li>`)).join('') || '<li>当前没有记录待确认事项。</li>'}</ul><p class="muted">这些待办不会因发布而自动消失。历史版本保持不变。</p>`,
         btn('继续编辑', 'close-dialog', 'secondary-button') + btn('确认并发布', 'confirm-publish'),
       )
       break
     case 'confirm-publish': {
-      if (projectContextChanged(projectContext(), state.intakeDocument)) { dialog.close(); toast('项目背景已改变，请先重新整理并采用草稿。'); navigate('clarify'); break }
+      if (!state.requirements.length || (!state.dirty && latest())) { dialog.close(); break }
+      if (roomContextChanged()) { dialog.close(); toast('项目背景已改变，请先重新整理并采用草稿。'); navigate('clarify'); break }
       const assessment = requireAssessment('publish', 'draft')
       if (!assessment) break
       const version = (latest()?.version || 0) + 1
@@ -1361,8 +1865,8 @@ document.addEventListener('click', (e) => {
       log(`发布需求 R${version}，共 ${state.requirements.length} 条`)
       dialog.close()
       samplePreview = null
-      navigate('compare')
-      toast(`需求 R${version} 已提交，可查看方案制作状态`)
+      void startRequirementInsight(latest()!)
+      toast(`需求 R${version} 已提交，Flash 正在进一步分析`)
       break
     }
     case 'show-sample': {
@@ -1621,6 +2125,10 @@ document.addEventListener('click', (e) => {
       toast('历史维度填写已导出。')
       break
     case 'export':
+      showDialog('导出与保存项目', `<div class="report-options"><div><p>将户型、需求、方案差异和待确认事项整理成可读报告，方便与家人或设计师讨论。</p>${btn('预览报告 / 保存为 PDF', 'report-preview')}</div><div><p>完整项目备份包含访谈草稿、上传图纸、墙体标注与历史记录。</p>${btn('下载完整项目 JSON', 'export-json', 'secondary-button')}</div><p data-project-save>${esc(projectSaveText())}</p></div>`, btn('重试保存', 'save-project', 'text-button') + btn('清除本机草稿', 'reset', 'text-button'))
+      break
+    case 'report-preview': previewProjectReport(); break
+    case 'export-json':
       download(
         '安居有数项目记录.json',
         JSON.stringify(
@@ -1631,13 +2139,16 @@ document.addEventListener('click', (e) => {
             projectContext: projectContext(),
             dimensionScales: scales,
             vendorDrafts,
+            intakeDraft: intakeDraft ? JSON.parse(intakeDraft) : null,
+            planning: planning.snapshot(),
+            progress: { planningChosen, furthestUnlocked, currentArea, lastWorkspacePage },
           },
           null,
           2,
         ),
         'application/json',
       )
-      toast('项目记录已导出，包含需求与方案历史。')
+      toast('完整项目已导出，包含户型、访谈和历史记录。')
       break
   }
 })
@@ -1792,10 +2303,14 @@ document.addEventListener('submit', (e) => {
   render()
 })
 function demo() {
+  cancelInsightJobs()
+  workflowChoosingProposal = false
   intakeDraft = null
   state = empty()
   scales = {}
   vendorDrafts = {}
+  planning.reset()
+  planningChosen = true; currentArea = '厨房'; selectedProjectRoom = 'kitchen'; spaceMode = 'project'; furthestUnlocked = 1
   state.brief = '厨房想好打理，电器够用，增加洗碗机，保留布局和窗户，不要开放展示格。'
   state.answers = {
     layout: '保留现有布局',
@@ -1812,4 +2327,32 @@ function demo() {
   log('载入完整厨房演示：需求 R1 与两家初版方案')
   navigate('compare')
 }
-render()
+const projectStore = createProjectStorage<ProjectSession>({
+  decode: decodeProject,
+  onStatus: next => { saveStatus = next; refreshSaveStatus() },
+})
+planning.subscribe(() => { scheduleProjectSave(); refreshSaveStatus() })
+async function initializeProject() {
+  projectReady = false; clearTimeout(saveTimer)
+  try {
+    const saved = await projectStore.load()
+    if (saved) {
+      const data = saved.data
+      state = data.state; intakeDraft = data.intakeDraft; scales = data.scales; vendorDrafts = data.vendorDrafts
+      planning.restore(data.planning)
+      planningChosen = data.planningChosen; furthestUnlocked = data.furthestUnlocked
+      currentArea = data.currentArea; lastWorkspacePage = data.lastWorkspacePage; selectedProjectRoom = data.selectedProjectRoom
+      vendorId = data.vendorId; draftItems = []
+      lastSavedFingerprint = JSON.stringify(captureProject())
+    }
+    recoveryError = ''; hasUnsavedChanges = false; projectReady = true
+  } catch (error) {
+    recoveryError = error instanceof Error ? error.message : '无法恢复本机草稿。'
+    projectReady = false
+  }
+  render()
+}
+for (const eventName of ['input', 'change', 'click', 'submit']) document.addEventListener(eventName, () => queueMicrotask(scheduleProjectSave))
+document.addEventListener('visibilitychange', () => { if (document.hidden) void saveProject() })
+window.addEventListener('pagehide', () => { void saveProject() })
+void initializeProject()

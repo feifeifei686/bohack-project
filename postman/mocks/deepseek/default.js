@@ -63,6 +63,17 @@ function intakeResult(input) {
   };
 }
 function result(operation, input) {
+  if (operation === 'requirement-insight') {
+    const first = input.requirements[0];
+    const second = input.requirements[1];
+    return {
+      summary: '已梳理每条需求的表达范围，建议把关联事项一起交给商家核对。',
+      findings: input.requirements.map((r, i) => ({ requirementId: r.id, clarity: i === 0 ? 'needs_detail' : 'clear', rationale: i === 0 ? '建议进一步明确可调整的范围，方便商家逐项回应。' : '需求目标和回应范围已有明确描述。', evidence: evidence(r.id, r.description.slice(0, 200)), checks: i === 0 ? ['请商家说明这条需求涉及的具体范围'] : [] })),
+      connections: second ? [{ fromId: first.id, toId: second.id, kind: 'synergy', reason: '合成测试关联：建议商家一起核对两项需求的实施范围。', evidence: [...evidence(first.id, first.description.slice(0, 120)), ...evidence(second.id, second.description.slice(0, 120))] }] : [],
+      nextSteps: [{ title: '补充方案回应范围', reason: '逐项确认具体做法，保留现场待核实事项。', requirementIds: [first.id] }],
+      warnings: ['合成测试输出，仅验证调用与可视化，不代表真实模型分析。'],
+    };
+  }
   if (operation === 'floorplan') return {"rooms": [{"id": "living", "name": "客厅", "kind": "living", "polygon": [[100, 100], [600, 100], [600, 400], [400, 400], [400, 800], [100, 800]], "confidence": 0.9}, {"id": "bedroom", "name": "卧室", "kind": "bedroom", "polygon": [[600, 100], [900, 100], [900, 800], [600, 800]], "confidence": 0.85}], "walls": [{"roomId": "living", "start": [100, 100], "end": [600, 100]}, {"roomId": "bedroom", "start": [900, 100], "end": [900, 800]}], "openings": [{"roomId": "living", "kind": "window", "start": [200, 100], "end": [400, 100]}], "furniture": [{"id": "bed1", "roomId": "bedroom", "kind": "bed", "bounds": [650, 300, 200, 300], "rotation": 90, "confidence": 0.9}], "warnings": ["合成测试图形，不代表模型识别准确率。"]};
   if (operation === 'intake') return intakeResult(input);
   if (operation === 'clarify') return {
@@ -113,7 +124,7 @@ http.createServer(async (req, res) => {
     }
     const vision = Array.isArray(body.messages[1].content);
     if(vision && !body.messages[1].content.some(p=>p.type==='image_url' && p.image_url?.url.startsWith('data:image/'))) return send(res,400,{error:'Missing image'});
-    const operation = vision ? 'floorplan' : body.messages[0].content.match(/^operation: (clarify|requirements|review|explain|intake)\b/)?.[1];
+    const operation = vision ? 'floorplan' : body.messages[0].content.match(/^operation: (clarify|requirements|review|explain|intake|requirement-insight)\b/)?.[1];
     const payload = vision ? {operation:'floorplan',input:{}} : JSON.parse(body.messages[1].content);
     if (!operation || payload.operation !== operation || !payload.input) return send(res, 400, { error: 'Missing operation or input' });
     const count = (await pm.state.get('deepseek.requests')) || 0;

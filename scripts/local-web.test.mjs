@@ -105,6 +105,9 @@ test('LAN peers can use intake without a code while other APIs and foreign origi
     assert.equal(floorplan.status,200); assert.equal(calls,5)
     assert.equal((await remoteRequest('/api/ai/floorplan', {Origin:'https://evil.example'}, 'POST')).status,403)
     assert.equal((await remoteRequest('/api/ai/floorplan', {}, 'GET')).status,403)
+    assert.equal((await remoteRequest('/api/ai/requirement-insight', { Origin: url }, 'POST')).status, 200)
+    assert.equal((await remoteRequest('/api/ai/requirement-insight', { Origin: 'https://evil.example' }, 'POST')).status, 403)
+    assert.equal((await remoteRequest('/api/ai/requirement-insight', {}, 'GET')).status, 403)
     const unknownHost = await remoteRequest('/', { Host: 'evil.example' }); assert.equal(unknownHost.status, 403)
   } finally {
     web.closeAllConnections(); api.closeAllConnections()

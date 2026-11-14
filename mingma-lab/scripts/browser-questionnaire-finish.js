@@ -24,6 +24,8 @@ return (async () => {
   check(!document.querySelector('.studio-navigation a[href="#compare"]'), 'Comparison locked until requirements published');
   await click('[data-action="publish"]');
   await click('[data-action="confirm-publish"]');
+  check(location.hash === '#requirements' && !!document.querySelector('.requirement-insight'), 'Publishing opens the second-pass Flash analysis');
+  await click('[data-action="insight-continue"]');
   check(location.hash === '#compare', 'Publishing enters scheme waiting page');
   check(document.querySelector('.merchant-waiting').textContent.includes('商家正在制作'), 'Waiting message precedes sample display');
   check(document.querySelectorAll('.proposal-sample').length === 2, 'Two ready-made examples available');

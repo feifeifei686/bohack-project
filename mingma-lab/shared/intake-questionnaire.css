@@ -1,14 +1,15 @@
 /* A single task at a time. Opted into by the Lucid project only. */
 .intake-questionnaire { --i-accent: #575674; --i-muted: #6d6875; }
-.intake-questionnaire .questionnaire-progress { margin-bottom: 28px; }
+.intake-questionnaire .questionnaire-progress { margin-bottom: 12px; }
 .intake-questionnaire .questionnaire-progress > div { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 12px; }
 .intake-questionnaire .questionnaire-progress strong { font-size: 15px; }
+.intake-questionnaire .questionnaire-progress .intake-save-state { display: inline; margin-left: 12px; color: var(--i-muted); font-size: 12px; font-weight: 400; }
 .intake-questionnaire .questionnaire-progress > div > span { color: var(--i-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .intake-questionnaire progress { display: block; appearance: none; width: 100%; height: 5px; border: 0; border-radius: 3px; color: var(--i-accent); background: var(--i-soft); overflow: hidden; }
 .intake-questionnaire progress::-webkit-progress-bar { background: var(--i-soft); }
 .intake-questionnaire progress::-webkit-progress-value { background: var(--i-accent); border-radius: 3px; }
 .intake-questionnaire progress::-moz-progress-bar { background: var(--i-accent); }
-.intake-questionnaire .questionnaire-progress nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.intake-questionnaire .questionnaire-progress nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }
 .intake-questionnaire .questionnaire-progress nav button { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 0; border: 0; color: var(--i-muted); background: transparent; font-size: 13px; }
 .intake-questionnaire .questionnaire-progress nav button[aria-current] { color: var(--i-accent); font-weight: 700; }
 .intake-questionnaire .questionnaire-progress nav button span { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--i-line); border-radius: 50%; font-size: 11px; }
@@ -48,9 +49,25 @@
 .intake-questionnaire .intake-bottom { margin-top: 32px; }
 .intake-questionnaire .intake-conversation .intake-question h3 { font-size: 24px; }
 .intake-questionnaire .intake-conversation .intake-question { padding-top: 8px; border-top: 0; }
+.intake-questionnaire[data-variant='lucid'] .intake-section-heading { margin-bottom: 14px; }
+.intake-questionnaire[data-variant='lucid'] .intake-section-heading p { margin-top: 6px; font-size: 14px; line-height: 1.7; }
+.intake-questionnaire[data-variant='lucid'] .intake-label { margin-top: 12px; }
+.intake-questionnaire[data-variant='lucid'] .intake-planning-context { padding-block: 4px; margin-bottom: 12px; }
+.intake-questionnaire[data-variant='lucid'] .intake-area-field { margin-top: 16px; }
+.intake-questionnaire[data-variant='lucid'] .intake-action-row { margin-top: 16px; }
+.intake-questionnaire[data-variant='lucid'] .intake-input-meta { font-size: 12px; }
+.intake-questionnaire[data-variant='lucid'] #intake-brief { min-height: 120px; }
+.intake-questionnaire .intake-area-disclosure { margin-top: 8px; border-block: 1px solid var(--i-line); }
+.intake-questionnaire .intake-area-disclosure > summary { display: flex; align-items: center; gap: 12px; justify-content: space-between; min-height: 44px; color: var(--i-ink); font-size: 13px; }
+.intake-questionnaire .intake-area-disclosure > summary > span { flex-shrink: 0; color: var(--i-accent); font-size: 12px; text-decoration: underline; text-underline-offset: 4px; }
+.intake-questionnaire .intake-area-disclosure[open] { padding-bottom: 16px; }
+.intake-questionnaire .intake-area-disclosure[open] > summary { margin-bottom: 0; }
 @media (max-width: 600px) {
   .intake-questionnaire .questionnaire-progress nav { gap: 3px; }
-  .intake-questionnaire .questionnaire-progress nav button { flex-direction: column; gap: 6px; font-size: 12px; min-width: 56px; }
+  .intake-questionnaire .questionnaire-progress nav button { gap: 4px; font-size: 12px; min-width: 0; }
+  .intake-questionnaire .questionnaire-progress nav button span { width: 18px; height: 18px; flex-shrink: 0; font-size: 10px; }
+  .intake-questionnaire .questionnaire-progress .intake-save-state { display: block; margin: 2px 0 0; font-size: 11px; }
+  .intake-questionnaire .questionnaire-progress > div { align-items: start; }
   .intake-questionnaire .questionnaire-review-heading { align-items: start; }
   .intake-questionnaire .questionnaire-sheet h2, .intake-questionnaire .intake-conversation .intake-question h3 { font-size: 21px; }
   .intake-questionnaire .questionnaire-review-heading > span { margin-top: 5px; }
