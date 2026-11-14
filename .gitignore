@@ -4,9 +4,12 @@ dist/
 coverage/
 *.tsbuildinfo
 /delivery/
+/postman/.dependencies/
+/postman/.runs/
 
 # Local browser sessions, verification captures and editor files
 .gstack/
+.local-run/
 .DS_Store
 Thumbs.db
 .idea/

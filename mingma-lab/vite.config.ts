@@ -7,13 +7,14 @@ const entry = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 export default defineConfig({
   plugins: [tailwindcss()],
   base: './',
+  server: {
+    proxy: { '/api': { target: process.env.MINGMA_API_URL || 'http://127.0.0.1:5199', changeOrigin: true } },
+  },
   build: {
     rolldownOptions: {
       input: {
-        gallery: entry('./index.html'),
-        atmosphere: entry('./versions/atmosphere/index.html'),
-        lucid: entry('./versions/lucid/index.html'),
-        atelier: entry('./versions/atelier/index.html'),
+        lucid: entry('./index.html'),
+        legacyLucid: entry('./versions/lucid/index.html'),
       },
     },
   },

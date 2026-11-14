@@ -55,13 +55,15 @@ return (async () => {
   await click('[data-action="select-proposal"]'); await click('[data-action="confirm-selection"]')
   check(state().selection.requirements.version === 2, 'New selection binds current requirement version')
 
-  // Loading a new demonstration must clear unrelated scale confirmations.
-  await reset(); await go('dimensions')
-  await change('[data-scale-note="O01"]', '旧项目的确认依据，不应带入新演示')
-  await change('[data-scale-score="O01"]', '3')
-  check(JSON.parse(localStorage.getItem(scaleKey)).O01.maturity === 3, 'Scale confirmation saved for current project')
-  await go('overview'); await click('[data-action="demo"]')
-  check(!localStorage.getItem(scaleKey) || Object.keys(JSON.parse(localStorage.getItem(scaleKey))).length === 0, 'New demonstration clears old scale evidence')
+  // A new demonstration clears the current project background without reviving old evidence.
+  await reset(); await go('requirements')
+  document.querySelector('.hub-context').open = true
+  await change('#context-household', '旧项目的确认依据，不应带入新演示', 'input')
+  await click('[data-context-confirm="household"]')
+  document.querySelector('#project-context-form').requestSubmit(); await wait()
+  check(state().projectContext.household.confirmed, 'Background confirmation saved for current project')
+  await go('overview'); await click('[data-action="demo"]'); await go('requirements')
+  check(document.querySelector('#context-household').value === '', 'New demonstration clears old background evidence')
 
   // Custom edited needs remain human-review items, and drafts survive navigation.
   await go('requirements'); await click('[data-action="edit-requirement"][data-id="K04"]')

@@ -1,0 +1,147 @@
+{
+  "verifiedAt": "2026-11-14T00:41:18.825952+00:00",
+  "localTests": {
+    "node": "24.22.1",
+    "passed": 34,
+    "failed": 0,
+    "command": "cd mingma-api && npm test",
+    "typecheck": "passed",
+    "cleanInstall": "npm ci, 34 tests and typecheck/build passed with no .env or existing node_modules"
+  },
+  "simulation": {
+    "tool": "Postman CLI 1.79.0",
+    "checksPassed": 19,
+    "upstreamRequests": 18,
+    "mode": "real local API with synthetic HTTP dependency",
+    "command": "cd mingma-api && npm run test:simulation",
+    "collection": {
+      "assertionsPassed": 17,
+      "failed": 0,
+      "requests": 7,
+      "upstream": "local synthetic provider",
+      "command": "cd mingma-api && npm run test:simulation -- --collection"
+    },
+    "totalUpstreamRequestsIncludingCollection": 22
+  },
+  "live": {
+    "mode": "live",
+    "at": "2026-11-14T00:36:13.788Z",
+    "results": [
+      {
+        "operation": "clarify",
+        "status": 200,
+        "schemaPassed": true,
+        "caseChecks": {
+          "factCount": 5,
+          "questionCount": 2,
+          "readyForDraft": false
+        },
+        "requiresHumanConfirmation": true,
+        "model": "deepseek-flash",
+        "usage": {
+          "promptTokens": 1092,
+          "completionTokens": 503,
+          "totalTokens": 1595
+        },
+        "durationMs": 3643,
+        "warningsCount": 3
+      },
+      {
+        "operation": "requirements",
+        "status": 200,
+        "schemaPassed": true,
+        "caseChecks": {
+          "requirementCount": 13,
+          "userEvidencePresent": true,
+          "roomMatches": true
+        },
+        "requiresHumanConfirmation": true,
+        "model": "deepseek-flash",
+        "usage": {
+          "promptTokens": 1213,
+          "completionTokens": 1768,
+          "totalTokens": 2981
+        },
+        "durationMs": 9400,
+        "warningsCount": 5
+      },
+      {
+        "operation": "review",
+        "status": 200,
+        "schemaPassed": true,
+        "caseChecks": {
+          "findingStatuses": {
+            "K02": "partial",
+            "K05": "responded"
+          },
+          "inputPendingPreserved": true
+        },
+        "requiresHumanConfirmation": true,
+        "model": "deepseek-flash",
+        "usage": {
+          "promptTokens": 1430,
+          "completionTokens": 376,
+          "totalTokens": 1806
+        },
+        "durationMs": 2499,
+        "warningsCount": 2
+      },
+      {
+        "operation": "explain",
+        "status": 200,
+        "schemaPassed": true,
+        "caseChecks": {
+          "explanationCount": 1,
+          "followUpQuestionsPresent": true
+        },
+        "requiresHumanConfirmation": true,
+        "model": "deepseek-flash",
+        "usage": {
+          "promptTokens": 1238,
+          "completionTokens": 386,
+          "totalTokens": 1624
+        },
+        "durationMs": 2921,
+        "warningsCount": 3
+      }
+    ]
+  },
+  "liveCallsThisTask": 8,
+  "liveTokenUsageThisTask": 15520,
+  "contract": {
+    "openapiSyntaxLint": "passed",
+    "generatedFrom": "mingma-api/src/schemas.ts",
+    "format": "OpenAPI 3.1"
+  },
+  "limits": [
+    "Frontend pages still use their local demonstration rules; API calls are not yet bound to the UI.",
+    "No account system, project database, merchant messaging or autonomous publishing.",
+    "Live validation covers four synthetic examples, not general renovation accuracy.",
+    "The CI configuration includes API tests and contract drift checks, but this change has not been run on GitHub in this turn."
+  ],
+  "review": {
+    "blockingIssuesRemaining": 0,
+    "fixes": [
+      "Client distinguishes slow-body cancellation from malformed JSON",
+      "Whitespace-only provider model metadata is rejected",
+      "Complete AI success response is schema-validated before HTTP 200"
+    ]
+  },
+  "discovery": {
+    "orbit": "Search and integrate found the official endpoint; its catalog schema omitted current JSON mode details.",
+    "authoritativeSources": [
+      "https://api-docs.deepseek.com/api/create-chat-completion/",
+      "https://api-docs.deepseek.com/guides/json_mode/"
+    ],
+    "verifiedModels": [
+      "deepseek-flash",
+      "deepseek-v4-pro"
+    ]
+  },
+  "postmanWorkspace": {
+    "signedIn": false,
+    "cloudResourcesUsed": false,
+    "statusCommandAvailable": false,
+    "fallback": "postman whoami and local spec/collection/simulation checks"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "requirementVersion": 1,
+  "requirements": [
+    {
+      "id": "K02", "title": "洗碗机与配套", "room": "厨房", "category": "水电与安装", "priority": "must",
+      "description": "预留洗碗机安装位，分别说明供水、排水与电源配套。",
+      "source": "用户确认：计划增加洗碗机。", "pending": ["设备型号和尺寸待确认", "现有供排水接口待现场核实"]
+    },
+    {
+      "id": "K05", "title": "柜体收纳形式", "room": "厨房", "category": "安装", "priority": "must",
+      "description": "不设置开放展示格；开放设备位如确有需要，另行确认。",
+      "source": "用户确认：不要开放展示格。", "pending": ["柜体尺寸待现场测量"]
+    }
+  ],
+  "proposal": {
+    "id": "merchant-a-r1-v1", "version": 1, "requirementVersion": 1,
+    "text": "厨房方案：预留洗碗机安装位。柜体采用封闭式收纳，不设置开放展示格；如需开放设备位，会单独说明并取得业主确认。柜体尺寸待现场测量。"
+  },
+  "focusRequirementIds": ["K02"]
+}

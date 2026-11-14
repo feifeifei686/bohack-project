@@ -1,0 +1,3309 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "明码 AI 接口",
+    "version": "0.1.0",
+    "description": "分组需求获取、动态追问、清单草稿、方案核对与解释反馈。当前为无状态服务端模型适配层；无账号、数据库、文件解析或发布操作。所有结论都需要人工确认，不包含价格分析。输入/输出 schema 的源文件为 mingma-api/src/schemas.ts。"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:5199",
+      "description": "本地开发服务"
+    }
+  ],
+  "tags": [
+    {
+      "name": "AI",
+      "description": "每次请求最多调用一次模型，无自动重试。"
+    },
+    {
+      "name": "Service",
+      "description": "本地运行和契约信息。"
+    }
+  ],
+  "paths": {
+    "/api/ai/clarify": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "clarify",
+        "summary": "澄清生活化需求",
+        "description": "提取有原文依据的事实，并提出最多 maxQuestions 个后续问题。readyForDraft 只是整理草稿的建议，不表示需求已经发布。answers.id 必须唯一。",
+        "security": [
+          {},
+          {
+            "localAccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClarifyRequest"
+              },
+              "example": {
+                "room": "厨房",
+                "brief": "厨房希望好打理，增加洗碗机，保留现有布局和窗，不要开放展示格。",
+                "answers": [],
+                "maxQuestions": 2
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "经过结构与来源校验的 AI 建议。始终需要人工确认，不写入项目或发送消息。",
+            "headers": {
+              "X-Request-ID": {
+                "description": "排查问题的请求编号。",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClarifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_JSON / VALIDATION_ERROR / REQUEST_ABORTED：输入格式、字段或编号不合法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED：已配置访问令牌时，缺少或无效的服务令牌。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "METHOD_NOT_ALLOWED：该接口不支持此方法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "REQUIREMENT_VERSION_MISMATCH：方案引用的需求版本不是本次基准。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PAYLOAD_TOO_LARGE：请求体超过 128 KiB。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE：请使用未压缩的 application/json。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED / AI_BUSY / AI_UPSTREAM_RATE_LIMIT：本地限流、并发已满或模型服务限流。",
+            "headers": {
+              "Retry-After": {
+                "description": "建议等待的秒数。",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "REQUEST_CANCELLED：客户端已中断；连接关闭时通常无法接收该响应。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR：服务内部错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "AI_UPSTREAM_AUTH / AI_UPSTREAM_QUOTA / AI_UPSTREAM_REJECTED / AI_REFUSED / AI_OUTPUT_TRUNCATED / AI_INVALID_OUTPUT：模型服务拒绝、返回不完整内容或输出校验未通过。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI_NOT_CONFIGURED / AI_UPSTREAM_UNAVAILABLE：缺少服务端密钥或模型服务不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "AI_TIMEOUT：模型服务超过配置的等待时间。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/requirements": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "requirements",
+        "summary": "生成待确认需求清单",
+        "description": "生成需求草稿，区分用户来源和模型补充建议。evidence 引用 brief 或 answer:<id> 的原文；输出不会创建已发布需求版本。",
+        "security": [
+          {},
+          {
+            "localAccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequirementsRequest"
+              },
+              "example": {
+                "room": "厨房",
+                "brief": "厨房希望好打理，增加洗碗机，保留现有布局和窗，不要开放展示格。",
+                "answers": [
+                  {
+                    "id": "layout",
+                    "question": "哪些位置希望保留？",
+                    "answer": "保留现有水槽和冰箱位置。"
+                  },
+                  {
+                    "id": "devices",
+                    "question": "需要预留哪些设备？",
+                    "answer": "需要洗碗机、电饭煲和咖啡机；洗碗机型号还没选。"
+                  },
+                  {
+                    "id": "cleaning",
+                    "question": "好打理具体指什么？",
+                    "answer": "主要希望表面容易擦拭、减少接缝积灰。"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "经过结构与来源校验的 AI 建议。始终需要人工确认，不写入项目或发送消息。",
+            "headers": {
+              "X-Request-ID": {
+                "description": "排查问题的请求编号。",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequirementsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_JSON / VALIDATION_ERROR / REQUEST_ABORTED：输入格式、字段或编号不合法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED：已配置访问令牌时，缺少或无效的服务令牌。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "METHOD_NOT_ALLOWED：该接口不支持此方法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "REQUIREMENT_VERSION_MISMATCH：方案引用的需求版本不是本次基准。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PAYLOAD_TOO_LARGE：请求体超过 128 KiB。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE：请使用未压缩的 application/json。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED / AI_BUSY / AI_UPSTREAM_RATE_LIMIT：本地限流、并发已满或模型服务限流。",
+            "headers": {
+              "Retry-After": {
+                "description": "建议等待的秒数。",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "REQUEST_CANCELLED：客户端已中断；连接关闭时通常无法接收该响应。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR：服务内部错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "AI_UPSTREAM_AUTH / AI_UPSTREAM_QUOTA / AI_UPSTREAM_REJECTED / AI_REFUSED / AI_OUTPUT_TRUNCATED / AI_INVALID_OUTPUT：模型服务拒绝、返回不完整内容或输出校验未通过。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI_NOT_CONFIGURED / AI_UPSTREAM_UNAVAILABLE：缺少服务端密钥或模型服务不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "AI_TIMEOUT：模型服务超过配置的等待时间。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/review": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "review",
+        "summary": "逐项核对商家方案",
+        "description": "针对当前需求版本逐条核对。每个需求恰好返回一条 finding，引用 proposal.text；版本不一致返回 409。已回应只表示方案文字回应，不代表现场条件已确认。",
+        "security": [
+          {},
+          {
+            "localAccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              },
+              "example": {
+                "requirementVersion": 1,
+                "requirements": [
+                  {
+                    "id": "K02",
+                    "title": "洗碗机与配套",
+                    "room": "厨房",
+                    "category": "水电与安装",
+                    "priority": "must",
+                    "description": "预留洗碗机安装位，分别说明供水、排水与电源配套。",
+                    "source": "用户确认：计划增加洗碗机。",
+                    "pending": [
+                      "设备型号和尺寸待确认",
+                      "现有供排水接口待现场核实"
+                    ]
+                  },
+                  {
+                    "id": "K05",
+                    "title": "柜体收纳形式",
+                    "room": "厨房",
+                    "category": "安装",
+                    "priority": "must",
+                    "description": "不设置开放展示格；开放设备位如确有需要，另行确认。",
+                    "source": "用户确认：不要开放展示格。",
+                    "pending": [
+                      "柜体尺寸待现场测量"
+                    ]
+                  }
+                ],
+                "proposal": {
+                  "id": "merchant-a-r1-v1",
+                  "version": 1,
+                  "requirementVersion": 1,
+                  "text": "厨房方案：预留洗碗机安装位。柜体采用封闭式收纳，不设置开放展示格；如需开放设备位，会单独说明并取得业主确认。柜体尺寸待现场测量。"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "经过结构与来源校验的 AI 建议。始终需要人工确认，不写入项目或发送消息。",
+            "headers": {
+              "X-Request-ID": {
+                "description": "排查问题的请求编号。",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_JSON / VALIDATION_ERROR / REQUEST_ABORTED：输入格式、字段或编号不合法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED：已配置访问令牌时，缺少或无效的服务令牌。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "METHOD_NOT_ALLOWED：该接口不支持此方法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "REQUIREMENT_VERSION_MISMATCH：方案引用的需求版本不是本次基准。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PAYLOAD_TOO_LARGE：请求体超过 128 KiB。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE：请使用未压缩的 application/json。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED / AI_BUSY / AI_UPSTREAM_RATE_LIMIT：本地限流、并发已满或模型服务限流。",
+            "headers": {
+              "Retry-After": {
+                "description": "建议等待的秒数。",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "REQUEST_CANCELLED：客户端已中断；连接关闭时通常无法接收该响应。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR：服务内部错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "AI_UPSTREAM_AUTH / AI_UPSTREAM_QUOTA / AI_UPSTREAM_REJECTED / AI_REFUSED / AI_OUTPUT_TRUNCATED / AI_INVALID_OUTPUT：模型服务拒绝、返回不完整内容或输出校验未通过。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI_NOT_CONFIGURED / AI_UPSTREAM_UNAVAILABLE：缺少服务端密钥或模型服务不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "AI_TIMEOUT：模型服务超过配置的等待时间。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/explain": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "explain",
+        "summary": "解释方案并起草反馈",
+        "description": "解释 focusRequirementIds 中的需求；未指定或空数组时解释全部需求。输出反馈草稿，不发送消息、不替商家承诺、不改变需求或方案状态。",
+        "security": [
+          {},
+          {
+            "localAccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplainRequest"
+              },
+              "example": {
+                "requirementVersion": 1,
+                "requirements": [
+                  {
+                    "id": "K02",
+                    "title": "洗碗机与配套",
+                    "room": "厨房",
+                    "category": "水电与安装",
+                    "priority": "must",
+                    "description": "预留洗碗机安装位，分别说明供水、排水与电源配套。",
+                    "source": "用户确认：计划增加洗碗机。",
+                    "pending": [
+                      "设备型号和尺寸待确认",
+                      "现有供排水接口待现场核实"
+                    ]
+                  },
+                  {
+                    "id": "K05",
+                    "title": "柜体收纳形式",
+                    "room": "厨房",
+                    "category": "安装",
+                    "priority": "must",
+                    "description": "不设置开放展示格；开放设备位如确有需要，另行确认。",
+                    "source": "用户确认：不要开放展示格。",
+                    "pending": [
+                      "柜体尺寸待现场测量"
+                    ]
+                  }
+                ],
+                "proposal": {
+                  "id": "merchant-a-r1-v1",
+                  "version": 1,
+                  "requirementVersion": 1,
+                  "text": "厨房方案：预留洗碗机安装位。柜体采用封闭式收纳，不设置开放展示格；如需开放设备位，会单独说明并取得业主确认。柜体尺寸待现场测量。"
+                },
+                "focusRequirementIds": [
+                  "K02"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "经过结构与来源校验的 AI 建议。始终需要人工确认，不写入项目或发送消息。",
+            "headers": {
+              "X-Request-ID": {
+                "description": "排查问题的请求编号。",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplainResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_JSON / VALIDATION_ERROR / REQUEST_ABORTED：输入格式、字段或编号不合法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED：已配置访问令牌时，缺少或无效的服务令牌。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "METHOD_NOT_ALLOWED：该接口不支持此方法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "REQUIREMENT_VERSION_MISMATCH：方案引用的需求版本不是本次基准。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PAYLOAD_TOO_LARGE：请求体超过 128 KiB。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE：请使用未压缩的 application/json。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED / AI_BUSY / AI_UPSTREAM_RATE_LIMIT：本地限流、并发已满或模型服务限流。",
+            "headers": {
+              "Retry-After": {
+                "description": "建议等待的秒数。",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "REQUEST_CANCELLED：客户端已中断；连接关闭时通常无法接收该响应。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR：服务内部错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "AI_UPSTREAM_AUTH / AI_UPSTREAM_QUOTA / AI_UPSTREAM_REJECTED / AI_REFUSED / AI_OUTPUT_TRUNCATED / AI_INVALID_OUTPUT：模型服务拒绝、返回不完整内容或输出校验未通过。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI_NOT_CONFIGURED / AI_UPSTREAM_UNAVAILABLE：缺少服务端密钥或模型服务不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "AI_TIMEOUT：模型服务超过配置的等待时间。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/intake": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "intake",
+        "summary": "分组获取需求与动态追问",
+        "description": "以全局、区域、公共项组织需求，把待确认作为状态保留。可附带最多三项来自“我的需求”的 projectContext 项目背景，作为约束和 context:<id> 引用来源，不重复填写、不自动生成施工项目；背景已核对不代表工程条件已确认。每轮最多两个追问，已答/暂缓维度不重复。mode=draft只整理草稿。保留既有编号、原文依据与未知数值，结果不会发布需求。",
+        "security": [
+          {},
+          {
+            "localAccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntakeRequest"
+              },
+              "example": {
+                "brief": "厨房想好打理，加一台洗碗机；客厅和走道地面想连贯，水电我不太懂。厨房保留现有布局和窗。",
+                "areas": [
+                  "厨房",
+                  "客厅",
+                  "走道"
+                ],
+                "answers": [],
+                "previousItems": [],
+                "projectContext": [
+                  {
+                    "id": "household",
+                    "text": "3人常住，每天在家做饭。",
+                    "confirmed": true
+                  },
+                  {
+                    "id": "schedule",
+                    "text": "施工期间继续居住，厨房不能长时间停用。",
+                    "confirmed": false
+                  }
+                ],
+                "mode": "refine"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "经过结构与来源校验的 AI 建议。始终需要人工确认，不写入项目或发送消息。",
+            "headers": {
+              "X-Request-ID": {
+                "description": "排查问题的请求编号。",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntakeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_JSON / VALIDATION_ERROR / REQUEST_ABORTED：输入格式、字段或编号不合法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED：已配置访问令牌时，缺少或无效的服务令牌。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "METHOD_NOT_ALLOWED：该接口不支持此方法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "REQUIREMENT_VERSION_MISMATCH：方案引用的需求版本不是本次基准。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PAYLOAD_TOO_LARGE：请求体超过 128 KiB。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE：请使用未压缩的 application/json。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED / AI_BUSY / AI_UPSTREAM_RATE_LIMIT：本地限流、并发已满或模型服务限流。",
+            "headers": {
+              "Retry-After": {
+                "description": "建议等待的秒数。",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "REQUEST_CANCELLED：客户端已中断；连接关闭时通常无法接收该响应。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR：服务内部错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "AI_UPSTREAM_AUTH / AI_UPSTREAM_QUOTA / AI_UPSTREAM_REJECTED / AI_REFUSED / AI_OUTPUT_TRUNCATED / AI_INVALID_OUTPUT：模型服务拒绝、返回不完整内容或输出校验未通过。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI_NOT_CONFIGURED / AI_UPSTREAM_UNAVAILABLE：缺少服务端密钥或模型服务不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "AI_TIMEOUT：模型服务超过配置的等待时间。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "Service"
+        ],
+        "operationId": "health",
+        "summary": "检查服务及密钥配置状态",
+        "security": [],
+        "description": "不请求模型，不验证账户余额或实时可用性。无需服务访问令牌，但仍检查 Host 与 Origin。",
+        "responses": {
+          "200": {
+            "description": "服务运行中。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "service",
+                    "version",
+                    "aiConfigured",
+                    "model"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    },
+                    "service": {
+                      "const": "mingma-ai-api"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "aiConfigured": {
+                      "type": "boolean"
+                    },
+                    "model": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "tags": [
+          "Service"
+        ],
+        "operationId": "getOpenApi",
+        "summary": "读取当前接口契约",
+        "security": [],
+        "description": "返回本生成器写入的 OpenAPI 3.1 文档；首次启动前执行 npm run build。",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 文档。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR：服务内部错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1200
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestId",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "ClarifyRequest": {
+        "type": "object",
+        "properties": {
+          "room": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "answers": {
+            "default": [],
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "question": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                },
+                "answer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "id",
+                "question",
+                "answer"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "maxQuestions": {
+            "default": 2,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          }
+        },
+        "required": [
+          "room",
+          "brief"
+        ],
+        "additionalProperties": false
+      },
+      "ClarifyResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1500
+              },
+              "facts": {
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "dimension": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "dimension",
+                    "value",
+                    "evidence"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "questions": {
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "dimension": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "question": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400
+                    },
+                    "options": {
+                      "minItems": 2,
+                      "maxItems": 6,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      }
+                    },
+                    "allowMultiple": {
+                      "type": "boolean"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "dimension",
+                    "question",
+                    "options",
+                    "allowMultiple",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "readyForDraft": {
+                "type": "boolean"
+              },
+              "pending": {
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                }
+              },
+              "warnings": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            },
+            "required": [
+              "summary",
+              "facts",
+              "questions",
+              "readyForDraft",
+              "pending",
+              "warnings"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "promptVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "durationMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "requiresHumanConfirmation": {
+                "type": "boolean",
+                "const": true
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "promptTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "completionTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "totalTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "promptTokens",
+                  "completionTokens",
+                  "totalTokens"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "model",
+              "promptVersion",
+              "durationMs",
+              "requiresHumanConfirmation",
+              "usage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestId",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "RequirementsRequest": {
+        "type": "object",
+        "properties": {
+          "room": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "answers": {
+            "default": [],
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "question": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                },
+                "answer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "id",
+                "question",
+                "answer"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "room",
+          "brief"
+        ],
+        "additionalProperties": false
+      },
+      "RequirementsResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1500
+              },
+              "requirements": {
+                "minItems": 1,
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    "room": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "category": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": [
+                        "must",
+                        "prefer"
+                      ]
+                    },
+                    "source": {
+                      "default": "",
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "pending": {
+                      "default": [],
+                      "maxItems": 15,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400
+                      }
+                    },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "suggestion"
+                      ]
+                    },
+                    "evidence": {
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "description",
+                    "room",
+                    "category",
+                    "priority",
+                    "source",
+                    "pending",
+                    "origin",
+                    "evidence"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "pending": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                }
+              },
+              "warnings": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            },
+            "required": [
+              "summary",
+              "requirements",
+              "pending",
+              "warnings"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "promptVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "durationMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "requiresHumanConfirmation": {
+                "type": "boolean",
+                "const": true
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "promptTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "completionTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "totalTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "promptTokens",
+                  "completionTokens",
+                  "totalTokens"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "model",
+              "promptVersion",
+              "durationMs",
+              "requiresHumanConfirmation",
+              "usage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestId",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "ReviewRequest": {
+        "type": "object",
+        "properties": {
+          "requirementVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "requirements": {
+            "minItems": 1,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "room": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "category": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": [
+                    "must",
+                    "prefer"
+                  ]
+                },
+                "source": {
+                  "default": "",
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "pending": {
+                  "default": [],
+                  "maxItems": 15,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "description",
+                "room",
+                "category",
+                "priority"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "proposal": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              },
+              "version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "requirementVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 30000
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "requirementVersion",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requirementVersion",
+          "requirements",
+          "proposal"
+        ],
+        "additionalProperties": false
+      },
+      "ReviewResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1500
+              },
+              "findings": {
+                "minItems": 1,
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "requirementId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "responded",
+                        "partial",
+                        "conflict",
+                        "unknown"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1200
+                    },
+                    "evidence": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "missing": {
+                      "maxItems": 15,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400
+                      }
+                    },
+                    "action": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 800
+                    }
+                  },
+                  "required": [
+                    "requirementId",
+                    "status",
+                    "reason",
+                    "evidence",
+                    "missing",
+                    "action"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "additionalItems": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "necessary_support",
+                        "optional",
+                        "needs_explanation"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 800
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "classification",
+                    "reason",
+                    "evidence"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "siteChecks": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                }
+              },
+              "warnings": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            },
+            "required": [
+              "summary",
+              "findings",
+              "additionalItems",
+              "siteChecks",
+              "warnings"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "promptVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "durationMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "requiresHumanConfirmation": {
+                "type": "boolean",
+                "const": true
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "promptTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "completionTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "totalTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "promptTokens",
+                  "completionTokens",
+                  "totalTokens"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "model",
+              "promptVersion",
+              "durationMs",
+              "requiresHumanConfirmation",
+              "usage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestId",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "ExplainRequest": {
+        "type": "object",
+        "properties": {
+          "requirementVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "requirements": {
+            "minItems": 1,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "room": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "category": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": [
+                    "must",
+                    "prefer"
+                  ]
+                },
+                "source": {
+                  "default": "",
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "pending": {
+                  "default": [],
+                  "maxItems": 15,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "description",
+                "room",
+                "category",
+                "priority"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "proposal": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              },
+              "version": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "requirementVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 30000
+              }
+            },
+            "required": [
+              "id",
+              "version",
+              "requirementVersion",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "focusRequirementIds": {
+            "default": [],
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          }
+        },
+        "required": [
+          "requirementVersion",
+          "requirements",
+          "proposal"
+        ],
+        "additionalProperties": false
+      },
+      "ExplainResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1500
+              },
+              "explanations": {
+                "minItems": 1,
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "requirementId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "plainLanguage": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1600
+                    },
+                    "impact": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1200
+                    },
+                    "questions": {
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400
+                      }
+                    },
+                    "evidence": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "requirementId",
+                    "plainLanguage",
+                    "impact",
+                    "questions",
+                    "evidence"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "feedbackDraft": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 6000
+              },
+              "siteChecks": {
+                "maxItems": 100,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                }
+              },
+              "warnings": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            },
+            "required": [
+              "summary",
+              "explanations",
+              "feedbackDraft",
+              "siteChecks",
+              "warnings"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "promptVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "durationMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "requiresHumanConfirmation": {
+                "type": "boolean",
+                "const": true
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "promptTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "completionTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "totalTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "promptTokens",
+                  "completionTokens",
+                  "totalTokens"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "model",
+              "promptVersion",
+              "durationMs",
+              "requiresHumanConfirmation",
+              "usage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestId",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "IntakeRequest": {
+        "type": "object",
+        "properties": {
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "areas": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          },
+          "answers": {
+            "maxItems": 40,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "targetId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dimension": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "question": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                },
+                "answer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "disposition": {
+                  "type": "string",
+                  "enum": [
+                    "answered",
+                    "deferred"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "targetId",
+                "dimension",
+                "question",
+                "answer",
+                "disposition"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "projectContext": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "household",
+                    "schedule",
+                    "confirmation"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1200
+                },
+                "confirmed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "text",
+                "confirmed"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "previousItems": {
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "scope": {
+                  "type": "string",
+                  "enum": [
+                    "global",
+                    "area",
+                    "shared",
+                    "unassigned"
+                  ]
+                },
+                "areas": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                },
+                "category": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "component": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "origin": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "suggestion"
+                  ]
+                },
+                "necessity": {
+                  "type": "string",
+                  "enum": [
+                    "must",
+                    "prefer",
+                    "optional",
+                    "undecided",
+                    "excluded"
+                  ]
+                },
+                "clarity": {
+                  "type": "string",
+                  "enum": [
+                    "clear",
+                    "vague"
+                  ]
+                },
+                "evidence": {
+                  "maxItems": 6,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sourceId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      }
+                    },
+                    "required": [
+                      "sourceId",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "standards": {
+                  "maxItems": 6,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "metric": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "quantity",
+                          "scope",
+                          "functional",
+                          "measurement",
+                          "professional"
+                        ]
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "unit": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "user_stated",
+                          "to_measure",
+                          "to_confirm",
+                          "proposal_required"
+                        ]
+                      },
+                      "verification": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "evidence": {
+                        "maxItems": 6,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "sourceId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "quote": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "required": [
+                            "sourceId",
+                            "quote"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "metric",
+                      "kind",
+                      "value",
+                      "unit",
+                      "status",
+                      "verification",
+                      "evidence"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "pending": {
+                  "maxItems": 12,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "question": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400
+                      },
+                      "owner": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "merchant",
+                          "site",
+                          "professional",
+                          "unassigned"
+                        ]
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "scope",
+                          "necessity",
+                          "decision",
+                          "measurement",
+                          "detail"
+                        ]
+                      },
+                      "blocking": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "question",
+                      "owner",
+                      "kind",
+                      "blocking"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "dependencies": {
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "scope",
+                "areas",
+                "category",
+                "component",
+                "description",
+                "origin",
+                "necessity",
+                "clarity",
+                "evidence",
+                "standards",
+                "pending",
+                "dependencies"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "refine",
+              "draft"
+            ]
+          }
+        },
+        "required": [
+          "brief",
+          "areas",
+          "answers",
+          "previousItems",
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "IntakeResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1800
+              },
+              "items": {
+                "minItems": 1,
+                "maxItems": 30,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "global",
+                        "area",
+                        "shared",
+                        "unassigned"
+                      ]
+                    },
+                    "areas": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      }
+                    },
+                    "category": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "component": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "suggestion"
+                      ]
+                    },
+                    "necessity": {
+                      "type": "string",
+                      "enum": [
+                        "must",
+                        "prefer",
+                        "optional",
+                        "undecided",
+                        "excluded"
+                      ]
+                    },
+                    "clarity": {
+                      "type": "string",
+                      "enum": [
+                        "clear",
+                        "vague"
+                      ]
+                    },
+                    "evidence": {
+                      "maxItems": 6,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "standards": {
+                      "maxItems": 6,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "metric": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "quantity",
+                              "scope",
+                              "functional",
+                              "measurement",
+                              "professional"
+                            ]
+                          },
+                          "value": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unit": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "user_stated",
+                              "to_measure",
+                              "to_confirm",
+                              "proposal_required"
+                            ]
+                          },
+                          "verification": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "evidence": {
+                            "maxItems": 6,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "sourceId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "quote": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2000
+                                }
+                              },
+                              "required": [
+                                "sourceId",
+                                "quote"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "metric",
+                          "kind",
+                          "value",
+                          "unit",
+                          "status",
+                          "verification",
+                          "evidence"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "pending": {
+                      "maxItems": 12,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "question": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400
+                          },
+                          "owner": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "merchant",
+                              "site",
+                              "professional",
+                              "unassigned"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "scope",
+                              "necessity",
+                              "decision",
+                              "measurement",
+                              "detail"
+                            ]
+                          },
+                          "blocking": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "question",
+                          "owner",
+                          "kind",
+                          "blocking"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "dependencies": {
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "scope",
+                    "areas",
+                    "category",
+                    "component",
+                    "description",
+                    "origin",
+                    "necessity",
+                    "clarity",
+                    "evidence",
+                    "standards",
+                    "pending",
+                    "dependencies"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "questions": {
+                "maxItems": 2,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "targetId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "dimension": {
+                      "type": "string",
+                      "enum": [
+                        "scope",
+                        "goal",
+                        "retention",
+                        "necessity",
+                        "usage",
+                        "quantity",
+                        "material",
+                        "measurement",
+                        "dependency",
+                        "shared"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "options": {
+                      "minItems": 2,
+                      "maxItems": 6,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 180
+                      }
+                    },
+                    "allowMultiple": {
+                      "type": "boolean"
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": [
+                        "scope",
+                        "intent",
+                        "global",
+                        "dependency",
+                        "shared",
+                        "detail"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "targetId",
+                    "dimension",
+                    "text",
+                    "reason",
+                    "options",
+                    "allowMultiple",
+                    "priority"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "conflicts": {
+                "maxItems": 12,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "itemIds": {
+                      "minItems": 1,
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 800
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "itemIds",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "readyForDraft": {
+                "type": "boolean"
+              },
+              "stopReason": {
+                "type": "string",
+                "maxLength": 1200
+              },
+              "warnings": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            },
+            "required": [
+              "summary",
+              "items",
+              "questions",
+              "conflicts",
+              "readyForDraft",
+              "stopReason",
+              "warnings"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "promptVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "durationMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "requiresHumanConfirmation": {
+                "type": "boolean",
+                "const": true
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "promptTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "completionTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "totalTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "promptTokens",
+                  "completionTokens",
+                  "totalTokens"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "model",
+              "promptVersion",
+              "durationMs",
+              "requiresHumanConfirmation",
+              "usage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestId",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "localAccessToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "独立的 API_ACCESS_TOKEN，不是 DeepSeek API Key。配置后所有 AI POST 接口必须携带；默认仅回环地址运行且未设置令牌时可省略。绑定非回环地址时要求至少 24 字符。"
+      }
+    }
+  }
+}

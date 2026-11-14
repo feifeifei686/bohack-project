@@ -1,0 +1,7 @@
+.intake-adopted-details { margin-block: .75rem; font-size: .875rem; line-height: 1.65; }
+.intake-adopted-details summary { cursor: pointer; font-weight: 600; padding-block: .25rem; }
+.intake-adopted-details ul { padding-inline-start: 1.1rem; }
+.intake-adopted-details li + li { margin-block-start: .5rem; }
+.intake-adopted-details blockquote { margin: .5rem 0; padding: .5rem .75rem; border: 1px solid currentColor; border-radius: .5rem; opacity: .8; overflow-wrap: anywhere; }
+.intake-requirement .req-controls { gap: .6rem; }
+main:has(#intake-root) .page-heading h1, .workspace:has(#intake-root) .page-heading h1 { text-wrap: balance; }

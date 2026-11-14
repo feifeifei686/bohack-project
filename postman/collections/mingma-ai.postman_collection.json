@@ -1,0 +1,305 @@
+{
+  "info": {
+    "name": "明码 AI 本地接口",
+    "description": "合成装修需求数据。五个成功请求会调用实际配置的模型；运行前确认目标服务和成本。自动生成自 schemas.ts 与 examples/，不要将真实密钥写入变量。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:5199",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const token = pm.variables.get('accessToken');",
+          "if (token) pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + token });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "服务健康状态",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('health', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().service).to.equal('mingma-ai-api'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "澄清生活化需求",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"room\": \"厨房\",\n  \"brief\": \"厨房希望好打理，增加洗碗机，保留现有布局和窗，不要开放展示格。\",\n  \"answers\": [],\n  \"maxQuestions\": 2\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/ai/clarify",
+        "description": "提取有原文依据的事实，并提出最多 maxQuestions 个后续问题。readyForDraft 只是整理草稿的建议，不表示需求已经发布。answers.id 必须唯一。"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('structured result and manual confirmation', () => { pm.expect(body.requestId).to.be.a('string'); pm.expect(body.data).to.be.an('object'); pm.expect(body.meta.requiresHumanConfirmation).to.equal(true); pm.expect(body.meta.model).to.be.a('string'); pm.expect(body.meta.usage.totalTokens).to.be.a('number'); });",
+              "pm.test('warnings available', () => pm.expect(body.data.warnings).to.be.an('array'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "生成待确认需求清单",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"room\": \"厨房\",\n  \"brief\": \"厨房希望好打理，增加洗碗机，保留现有布局和窗，不要开放展示格。\",\n  \"answers\": [\n    {\n      \"id\": \"layout\",\n      \"question\": \"哪些位置希望保留？\",\n      \"answer\": \"保留现有水槽和冰箱位置。\"\n    },\n    {\n      \"id\": \"devices\",\n      \"question\": \"需要预留哪些设备？\",\n      \"answer\": \"需要洗碗机、电饭煲和咖啡机；洗碗机型号还没选。\"\n    },\n    {\n      \"id\": \"cleaning\",\n      \"question\": \"好打理具体指什么？\",\n      \"answer\": \"主要希望表面容易擦拭、减少接缝积灰。\"\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/ai/requirements",
+        "description": "生成需求草稿，区分用户来源和模型补充建议。evidence 引用 brief 或 answer:<id> 的原文；输出不会创建已发布需求版本。"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('structured result and manual confirmation', () => { pm.expect(body.requestId).to.be.a('string'); pm.expect(body.data).to.be.an('object'); pm.expect(body.meta.requiresHumanConfirmation).to.equal(true); pm.expect(body.meta.model).to.be.a('string'); pm.expect(body.meta.usage.totalTokens).to.be.a('number'); });",
+              "pm.test('warnings available', () => pm.expect(body.data.warnings).to.be.an('array'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "逐项核对商家方案",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requirementVersion\": 1,\n  \"requirements\": [\n    {\n      \"id\": \"K02\",\n      \"title\": \"洗碗机与配套\",\n      \"room\": \"厨房\",\n      \"category\": \"水电与安装\",\n      \"priority\": \"must\",\n      \"description\": \"预留洗碗机安装位，分别说明供水、排水与电源配套。\",\n      \"source\": \"用户确认：计划增加洗碗机。\",\n      \"pending\": [\n        \"设备型号和尺寸待确认\",\n        \"现有供排水接口待现场核实\"\n      ]\n    },\n    {\n      \"id\": \"K05\",\n      \"title\": \"柜体收纳形式\",\n      \"room\": \"厨房\",\n      \"category\": \"安装\",\n      \"priority\": \"must\",\n      \"description\": \"不设置开放展示格；开放设备位如确有需要，另行确认。\",\n      \"source\": \"用户确认：不要开放展示格。\",\n      \"pending\": [\n        \"柜体尺寸待现场测量\"\n      ]\n    }\n  ],\n  \"proposal\": {\n    \"id\": \"merchant-a-r1-v1\",\n    \"version\": 1,\n    \"requirementVersion\": 1,\n    \"text\": \"厨房方案：预留洗碗机安装位。柜体采用封闭式收纳，不设置开放展示格；如需开放设备位，会单独说明并取得业主确认。柜体尺寸待现场测量。\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/ai/review",
+        "description": "针对当前需求版本逐条核对。每个需求恰好返回一条 finding，引用 proposal.text；版本不一致返回 409。已回应只表示方案文字回应，不代表现场条件已确认。"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('structured result and manual confirmation', () => { pm.expect(body.requestId).to.be.a('string'); pm.expect(body.data).to.be.an('object'); pm.expect(body.meta.requiresHumanConfirmation).to.equal(true); pm.expect(body.meta.model).to.be.a('string'); pm.expect(body.meta.usage.totalTokens).to.be.a('number'); });",
+              "pm.test('warnings available', () => pm.expect(body.data.warnings).to.be.an('array'));",
+              "pm.test('every requirement has one finding', () => { const input = JSON.parse(pm.request.body.raw); pm.expect(body.data.findings.map(x => x.requirementId).sort()).to.eql(input.requirements.map(x => x.id).sort()); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "解释方案并起草反馈",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requirementVersion\": 1,\n  \"requirements\": [\n    {\n      \"id\": \"K02\",\n      \"title\": \"洗碗机与配套\",\n      \"room\": \"厨房\",\n      \"category\": \"水电与安装\",\n      \"priority\": \"must\",\n      \"description\": \"预留洗碗机安装位，分别说明供水、排水与电源配套。\",\n      \"source\": \"用户确认：计划增加洗碗机。\",\n      \"pending\": [\n        \"设备型号和尺寸待确认\",\n        \"现有供排水接口待现场核实\"\n      ]\n    },\n    {\n      \"id\": \"K05\",\n      \"title\": \"柜体收纳形式\",\n      \"room\": \"厨房\",\n      \"category\": \"安装\",\n      \"priority\": \"must\",\n      \"description\": \"不设置开放展示格；开放设备位如确有需要，另行确认。\",\n      \"source\": \"用户确认：不要开放展示格。\",\n      \"pending\": [\n        \"柜体尺寸待现场测量\"\n      ]\n    }\n  ],\n  \"proposal\": {\n    \"id\": \"merchant-a-r1-v1\",\n    \"version\": 1,\n    \"requirementVersion\": 1,\n    \"text\": \"厨房方案：预留洗碗机安装位。柜体采用封闭式收纳，不设置开放展示格；如需开放设备位，会单独说明并取得业主确认。柜体尺寸待现场测量。\"\n  },\n  \"focusRequirementIds\": [\n    \"K02\"\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/ai/explain",
+        "description": "解释 focusRequirementIds 中的需求；未指定或空数组时解释全部需求。输出反馈草稿，不发送消息、不替商家承诺、不改变需求或方案状态。"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('structured result and manual confirmation', () => { pm.expect(body.requestId).to.be.a('string'); pm.expect(body.data).to.be.an('object'); pm.expect(body.meta.requiresHumanConfirmation).to.equal(true); pm.expect(body.meta.model).to.be.a('string'); pm.expect(body.meta.usage.totalTokens).to.be.a('number'); });",
+              "pm.test('warnings available', () => pm.expect(body.data.warnings).to.be.an('array'));",
+              "pm.test('focus preserved', () => { const input = JSON.parse(pm.request.body.raw); pm.expect(body.data.explanations.map(x => x.requirementId).sort()).to.eql(input.focusRequirementIds.slice().sort()); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "分组获取需求与动态追问",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"brief\": \"厨房想好打理，加一台洗碗机；客厅和走道地面想连贯，水电我不太懂。厨房保留现有布局和窗。\",\n  \"areas\": [\n    \"厨房\",\n    \"客厅\",\n    \"走道\"\n  ],\n  \"answers\": [],\n  \"previousItems\": [],\n  \"projectContext\": [\n    {\n      \"id\": \"household\",\n      \"text\": \"3人常住，每天在家做饭。\",\n      \"confirmed\": true\n    },\n    {\n      \"id\": \"schedule\",\n      \"text\": \"施工期间继续居住，厨房不能长时间停用。\",\n      \"confirmed\": false\n    }\n  ],\n  \"mode\": \"refine\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/ai/intake",
+        "description": "以全局、区域、公共项组织需求，把待确认作为状态保留。可附带最多三项来自“我的需求”的 projectContext 项目背景，作为约束和 context:<id> 引用来源，不重复填写、不自动生成施工项目；背景已核对不代表工程条件已确认。每轮最多两个追问，已答/暂缓维度不重复。mode=draft只整理草稿。保留既有编号、原文依据与未知数值，结果不会发布需求。"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('structured result and manual confirmation', () => { pm.expect(body.requestId).to.be.a('string'); pm.expect(body.data).to.be.an('object'); pm.expect(body.meta.requiresHumanConfirmation).to.equal(true); pm.expect(body.meta.model).to.be.a('string'); pm.expect(body.meta.usage.totalTokens).to.be.a('number'); });",
+              "pm.test('warnings available', () => pm.expect(body.data.warnings).to.be.an('array'));",
+              "pm.test('intake groups and questions', () => { pm.expect(body.data.items).to.be.an('array').that.is.not.empty; pm.expect(body.data.questions.length).to.be.at.most(2); const ids = body.data.items.map(x => x.id); pm.expect(new Set(ids).size).to.equal(ids.length); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "拒绝未知输入字段",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"room\": \"厨房\",\n  \"brief\": \"厨房希望好打理，增加洗碗机，保留现有布局和窗，不要开放展示格。\",\n  \"answers\": [],\n  \"maxQuestions\": 2,\n  \"unexpected\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/ai/clarify"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('expected boundary error', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error.code).to.equal('VALIDATION_ERROR'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "拒绝过期需求版本",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requirementVersion\": 2,\n  \"requirements\": [\n    {\n      \"id\": \"K02\",\n      \"title\": \"洗碗机与配套\",\n      \"room\": \"厨房\",\n      \"category\": \"水电与安装\",\n      \"priority\": \"must\",\n      \"description\": \"预留洗碗机安装位，分别说明供水、排水与电源配套。\",\n      \"source\": \"用户确认：计划增加洗碗机。\",\n      \"pending\": [\n        \"设备型号和尺寸待确认\",\n        \"现有供排水接口待现场核实\"\n      ]\n    },\n    {\n      \"id\": \"K05\",\n      \"title\": \"柜体收纳形式\",\n      \"room\": \"厨房\",\n      \"category\": \"安装\",\n      \"priority\": \"must\",\n      \"description\": \"不设置开放展示格；开放设备位如确有需要，另行确认。\",\n      \"source\": \"用户确认：不要开放展示格。\",\n      \"pending\": [\n        \"柜体尺寸待现场测量\"\n      ]\n    }\n  ],\n  \"proposal\": {\n    \"id\": \"merchant-a-r1-v1\",\n    \"version\": 1,\n    \"requirementVersion\": 1,\n    \"text\": \"厨房方案：预留洗碗机安装位。柜体采用封闭式收纳，不设置开放展示格；如需开放设备位，会单独说明并取得业主确认。柜体尺寸待现场测量。\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/ai/review"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('expected boundary error', () => { pm.response.to.have.status(409); pm.expect(pm.response.json().error.code).to.equal('REQUIREMENT_VERSION_MISMATCH'); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

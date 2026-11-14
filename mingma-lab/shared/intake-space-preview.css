@@ -1,0 +1,175 @@
+.intake-spatial-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 33%);
+  align-items: start;
+  gap: clamp(22px, 5vw, 76px);
+}
+.intake-spatial-layout .intake-root .intake-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 38px;
+}
+.intake-spatial-layout .intake-root :is(.intake-panel, .intake-item) {
+  padding-inline: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.intake-spatial-layout .intake-root .intake-panel { padding-block: 6px 0; }
+.intake-spatial-layout .intake-root :is(.intake-aside, .intake-item) {
+  padding-top: 21px;
+  border-top: 1px solid var(--i-line);
+}
+.intake-spatial-layout .intake-root :is(.intake-project-context, .intake-planning-context, .intake-question) {
+  padding-inline: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.intake-spatial-layout .intake-root .intake-project-context { padding-block: 0; }
+.intake-spatial-layout .intake-root .intake-conversation .intake-question { border-top: 1px solid var(--i-line); }
+.intake-spatial-layout .intake-root .intake-chip {
+  padding-inline: 9px;
+  border-color: transparent;
+}
+.intake-spatial-layout .intake-root .intake-chip:has(input:checked) {
+  background: var(--i-soft);
+  border-color: transparent;
+}
+.intake-spatial-layout .intake-root .intake-option {
+  border: 0;
+  border-bottom: 1px solid var(--i-line);
+  border-radius: 0;
+  background: transparent;
+}
+.intake-spatial-layout .intake-root .intake-option:has(input:checked) { background: var(--i-soft); }
+.intake-spatial-layout .intake-root #intake-brief {
+  background: var(--i-soft);
+  border: 0;
+  border-bottom: 1px solid var(--i-line);
+  border-radius: 10px 10px 0 0;
+}
+
+.intake-space {
+  --glass-ink: #244c56;
+  position: sticky;
+  top: 25px;
+  min-width: 0;
+  padding: 4px 0 12px;
+  color: var(--glass-ink);
+}
+.intake-spatial-layout:has(.intake-root[data-variant="atmosphere"]) .intake-space {
+  --glass-ink: #c7efdf;
+}
+.intake-space-header {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+}
+.intake-space-header small { font-size: .71rem; }
+.intake-space-header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  font-size: .76rem;
+  font-weight: 600;
+  color: inherit;
+  text-underline-offset: 4px;
+}
+.intake-space-header a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.intake-space-motion {
+  position: relative;
+  z-index: 1;
+  transform-origin: top left;
+  pointer-events: none;
+}
+.intake-space-motion::before {
+  content: "";
+  position: absolute;
+  inset: 22% 8% 4%;
+  background: radial-gradient(ellipse, #87d6e44d 0%, transparent 72%);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 720ms ease;
+}
+.intake-space.is-glass .intake-space-motion::before { opacity: 1; }
+.intake-space.is-arriving { z-index: 50; }
+.intake-space-orbit {
+  position: relative;
+  aspect-ratio: 840 / 485;
+  transform-origin: top left;
+}
+.intake-space .planning-floorplan {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  overflow: visible;
+}
+.intake-space:not(.is-arriving).is-glass .planning-floorplan {
+  animation: intake-floor-orbit 16s ease-in-out infinite;
+  animation-play-state: paused;
+  transform-origin: center;
+}
+.intake-space.is-visible.is-glass:not(.is-arriving) .planning-floorplan { animation-play-state: running; }
+@keyframes intake-floor-orbit {
+  0%, 100% { transform: perspective(620px) rotateY(0) rotateZ(0) translateY(0); }
+  30% { transform: perspective(620px) rotateY(5deg) rotateZ(.5deg) translateY(-3px); }
+  75% { transform: perspective(620px) rotateY(-4deg) rotateZ(-.4deg) translateY(-1px); }
+}
+.intake-space[data-spatial-phase="analyzing"] .intake-space-motion { animation: intake-floor-read 1.8s ease-in-out infinite paused; }
+.intake-space.is-visible[data-spatial-phase="analyzing"] .intake-space-motion { animation-play-state: running; }
+@keyframes intake-floor-read {
+  50% { filter: brightness(1.18) drop-shadow(0 5px 12px #70cbd47f); }
+}
+.intake-space .planning-room { transition: transform 720ms cubic-bezier(.25,.72,.3,1), filter 720ms ease; }
+.intake-space .planning-floorplan :is([data-model-box] > polygon, [data-model-detail]:not([filter])) {
+  transition: fill 720ms ease, fill-opacity 720ms ease, stroke 720ms ease, stroke-opacity 720ms ease;
+}
+.intake-space.is-glass .planning-floorplan :is([data-model-box] > polygon, [data-model-detail]:not([filter])) {
+  fill: #a8dbe6;
+  fill-opacity: .24;
+  stroke: #4f8295;
+  stroke-width: 1.35;
+  stroke-opacity: .7;
+}
+.intake-space .planning-room-label, .intake-space .planning-hotspot { transition: opacity 570ms ease; }
+.intake-space.is-glass :is(.planning-room-label, .planning-hotspot) { opacity: 0; }
+.intake-space.is-glass .planning-room.is-focused .planning-tint { fill: #79d7d5; fill-opacity: .38; }
+.intake-space.is-glass .planning-room.is-focused .planning-outline { stroke: #257682; stroke-width: 3.5; }
+.intake-space.is-glass .planning-floorplan .is-feature-focus :is([data-model-box] > polygon, [data-model-detail]),
+.intake-space.is-glass .planning-floorplan .is-feature-focus > polygon {
+  fill: #a4f3e8;
+  fill-opacity: .68;
+  stroke: #16767b;
+  stroke-width: 3.5;
+}
+.intake-space-caption { margin: 0; text-align: center; font-size: .82rem; font-weight: 680; }
+@media (max-width: 959px) {
+  .intake-spatial-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .intake-space {
+    grid-row: 1;
+    z-index: 3;
+    top: 8px;
+    justify-self: end;
+    width: min(100%, 320px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 145px;
+    align-items: center;
+    gap: 0 8px;
+    padding: 5px 8px;
+    background: color-mix(in srgb, var(--spatial-mobile-backdrop, #f2f8fa) 80%, transparent);
+    border-radius: 10px;
+    backdrop-filter: blur(14px);
+  }
+  .intake-spatial-layout:has(.intake-root[data-variant="atmosphere"]) { --spatial-mobile-backdrop: #1c2823; }
+  .intake-space-header { grid-column: 1; flex-direction: column; align-items: flex-start; gap: 1px; }
+  .intake-space-header a { min-height: 32px; }
+  .intake-space-motion { grid-column: 2; grid-row: 1 / span 2; }
+  .intake-space-caption { grid-column: 1; text-align: left; line-height: 1.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intake-space :is(.planning-floorplan, .intake-space-motion) { animation: none !important; }
+  .intake-space *, .intake-space-motion::before { transition: none !important; }
+}

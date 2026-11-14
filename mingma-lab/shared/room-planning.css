@@ -1,0 +1,269 @@
+.room-planning {
+  --plan-ink: #27362b;
+  --plan-muted: #55644f;
+  --plan-green: #355943;
+  --plan-accent: #52765a;
+  --plan-surface: #fcfaf3;
+  --plan-line: #dedfd1;
+  background: #f6f4eb;
+  border-radius: 22px;
+  color: var(--plan-ink);
+  padding: clamp(14px, 2.25vw, 32px);
+  margin-block: 10px 26px;
+}
+.planning-header { margin-bottom: clamp(14px, 2vw, 23px); }
+.planning-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  color: var(--plan-green);
+  font-size: .84rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+.planning-back svg { transform: rotate(180deg); width: 15px; }
+.planning-header h1 {
+  margin: 5px 0 7px;
+  font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+  line-height: 1.12;
+  letter-spacing: -.035em;
+  font-weight: 720;
+  color: var(--plan-ink);
+}
+.planning-header p { margin: 0; color: var(--plan-muted); font-size: .91rem; }
+.planning-layout { display: grid; gap: 14px; }
+.planning-model, .planning-sidebar {
+  min-width: 0;
+  background: var(--plan-surface);
+  border: 1px solid var(--plan-line);
+  border-radius: 16px;
+}
+.planning-model { overflow: hidden; align-self: start; }
+.planning-stage {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: radial-gradient(ellipse at 33% 18%, #faf9f0, #e8e8da);
+}
+.planning-stage::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image: radial-gradient(#9b9f82 1px, transparent 1px);
+  background-size: 17px 17px;
+  opacity: .22;
+  pointer-events: none;
+}
+.planning-stage--enter .planning-floorplan { animation: planning-arrive 480ms cubic-bezier(.2,.72,.25,1) both; }
+@keyframes planning-arrive { from { transform: scale(.98); } to { transform: scale(1); } }
+.planning-source {
+  position: absolute;
+  top: 11px;
+  left: 11px;
+  border-radius: 7px;
+  padding: 5px 9px;
+  background: #fffdf4;
+  color: var(--plan-muted);
+  font-size: .71rem;
+  font-weight: 650;
+}
+.planning-floorplan {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(51vh, 520px);
+  position: relative;
+  isolation: isolate;
+}
+.planning-room {
+  cursor: pointer;
+  transform: translateY(0);
+  transition: transform 510ms cubic-bezier(.25,.72,.3,1), filter 510ms ease;
+}
+.planning-room.is-selected { transform: translateY(-25px); filter: brightness(1.035); }
+.planning-tint { transition: fill 510ms ease; pointer-events: none; }
+.planning-room.is-selected .planning-tint { fill: #86ad89; fill-opacity: .2; }
+.planning-outline { stroke: transparent; stroke-width: 3; stroke-linejoin: round; pointer-events: none; }
+
+.planning-room.is-selected .planning-outline { stroke: #52765a; }
+.planning-room:not(.is-selected):hover .planning-tint { fill: #a3ba93; fill-opacity: .09; }
+.planning-seams { fill: none; stroke: #8f8a70; stroke-opacity: .28; stroke-width: .9; pointer-events: none; }
+.planning-lift-shadow { filter: url(#planning-shadow); pointer-events: none; }
+.planning-lift-shadow polygon { opacity: 0; transition: opacity 510ms ease; }
+.planning-lift-shadow .is-selected { opacity: .34; }
+.planning-room-label { pointer-events: none; }
+.planning-room-label rect { fill: #fffdf6; fill-opacity: .94; }
+.planning-room-label text { fill: #334437; font-family: inherit; font-size: 18px; font-weight: 730; }
+.planning-room.is-selected .planning-room-label rect { fill: #355943; fill-opacity: 1; }
+.planning-room.is-selected .planning-room-label text { fill: white; }
+.planning-hotspot { outline: none; cursor: pointer; }
+.planning-hotspot circle { fill: #fffdf6; stroke: #355943; stroke-width: 1.8px; }
+.planning-hotspot circle:last-child { fill: #355943; stroke: none; }
+.planning-hotspot .planning-hotspot-hit { fill: transparent; stroke: none; pointer-events: all; }
+.planning-hotspot:hover circle:nth-of-type(2), .planning-hotspot:focus-visible circle:nth-of-type(2), .planning-hotspot[aria-pressed="true"] circle:nth-of-type(2) { fill: #bcd6b5; stroke-width: 3; }
+.planning-model-footer { padding: 12px clamp(11px, 2vw, 24px) 15px; }
+.planning-room-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.planning-room-picker button {
+  padding: 0 clamp(8px, 1.8vw, 17px);
+  min-height: 44px;
+  border: 1px solid var(--plan-line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--plan-ink);
+  font-size: .84rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.planning-room-picker button:hover { background: #edf1e6; }
+.planning-room-picker button[aria-pressed="true"] { background: #e1eadb; border-color: #8ea48c; color: #254a34; }
+.planning-model-footer p { margin: 9px 0 0; color: var(--plan-muted); font-size: .75rem; }
+.planning-sidebar { display: flex; flex-direction: column; justify-content: space-between; padding: clamp(16px, 2.5vw, 26px); gap: 22px; }
+.planning-room-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.planning-room-heading h2 { margin: 0; color: var(--plan-ink); font-size: clamp(1.55rem, 3vw, 2.05rem); font-weight: 720; }
+.planning-room-heading span, .planning-example-focus small {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #e8ebdf;
+  color: #475940;
+  font-size: .72rem;
+}
+.planning-list-label { margin: 9px 0 10px; color: var(--plan-muted); font-size: .8rem; }
+.planning-needs { margin: 0; padding: 0; list-style: none; }
+.planning-needs li, .planning-example-focus {
+  padding: 12px 10px;
+  border-top: 1px solid var(--plan-line);
+  overflow-wrap: anywhere;
+}
+.planning-needs li b, .planning-example-focus b { display: block; font-size: .93rem; font-weight: 680; }
+.planning-needs li p { margin: 4px 0 0; color: var(--plan-muted); font-size: .82rem; line-height: 1.55; }
+.planning-needs li.is-highlighted, .planning-example-focus.is-highlighted { background: #e5eddf; box-shadow: inset 0 0 0 1px #a9bca3; border-radius: 8px; border-top-color: transparent; }
+.planning-example-focus { margin-top: 12px; }
+.planning-example-focus b { margin-top: 5px; }
+.planning-actions { display: grid; gap: 4px; }
+.planning-primary, .planning-text {
+  min-height: 44px;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  font-weight: 680;
+  font-size: .88rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.planning-primary { color: white; background: var(--plan-green); }
+.planning-primary:hover { background: #284b36; }
+.planning-text { color: var(--plan-green); background: transparent; }
+.planning-text:hover { background: #edf1e6; }
+.room-planning :is(button, a):focus-visible { outline: 2px solid var(--plan-accent); outline-offset: 3px; }
+.intake-planning-context { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 0 0 14px; }
+.intake-planning-context a { color: inherit; text-underline-offset: 3px; }
+@media (min-width: 850px) {
+  .planning-layout { grid-template-columns: minmax(0, 1fr) minmax(255px, 30%); gap: 18px; }
+  .planning-source { top: 16px; left: 17px; }
+}
+@media (max-width: 600px) {
+  .planning-room-label text { font-size: 28px; }
+  .planning-room-label rect { transform: scale(1.32, 1.13); }
+  .planning-source { top: 7px; left: 7px; padding: 4px 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planning-stage--enter .planning-floorplan { animation: none; }
+  .room-planning :is(.planning-room, .planning-outline, .planning-tint, .planning-lift-shadow polygon) { transition: none; }
+}
+
+.planning-home {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(14px, 4vw, 56px);
+  padding: clamp(16px, 3.7vw, 48px);
+  align-items: center;
+}
+.planning-home-copy h2 { margin: 0 0 8px; font-size: clamp(1.4rem, 2.8vw, 2.25rem); letter-spacing: -.025em; }
+.planning-home-copy p { margin: 0; overflow-wrap: anywhere; }
+.planning-home-copy .notebook-action { margin-block: 20px; }
+.planning-home-copy .project-facts { margin-bottom: 0; }
+.planning-home-photo { min-width: 0; margin: 0; border-radius: 14px; overflow: hidden; }
+.planning-home-photo img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.a-board > .planning-home-photo img { height: 100%; min-height: 230px; }
+@media (max-width: 660px) {
+  .planning-home { grid-template-columns: minmax(0, 1fr); }
+  .planning-home-photo img { aspect-ratio: 2 / 1; }
+}
+
+.room-planning [hidden] { display: none !important; }
+.planning-drawing-screen {
+  max-width: 1050px;
+  margin-inline: auto;
+  padding: clamp(13px, 2.5vw, 28px);
+  background: #edf6f6;
+  color: #234952;
+  border-radius: 14px;
+}
+.planning-drawing-toolbar, .planning-drawing-footer, .planning-drawing-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.planning-drawing-toolbar small { display: block; font-size: .75rem; margin-top: 4px; color: #45676e; }
+.planning-paper {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  margin-block: 14px;
+}
+.planning-paper > svg, .planning-upload-paper { display: block; width: min(100%, 660px); }
+.planning-paper > svg { max-height: min(51vh, 490px); }
+.planning-upload {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 10px;
+  cursor: pointer;
+  position: relative;
+  font-size: .86rem;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.planning-upload:focus-within { outline: 2px solid #236771; outline-offset: 2px; }
+.planning-upload input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.planning-drawing-footer { border-top: 1px solid #bed7db; padding-top: 10px; }
+.planning-drawing-footer p { font-size: .83rem; }
+.planning-drawing-footer .planning-primary { padding-inline: 17px; }
+.planning-drawing-footer .planning-primary:disabled { opacity: .5; cursor: default; }
+.planning-upload-paper { position: relative; max-height: 550px; }
+.planning-upload-paper img { width: 100%; height: 100%; display: block; object-fit: fill; }
+.planning-upload-paper svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.planning-mark-tools { font-size: .82rem; margin-bottom: 10px; }
+.planning-mark-tools > div { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-block: 8px; }
+.planning-mark-tools label { display: grid; gap: 4px; }
+.planning-mark-tools input { width: 68px; min-height: 44px; border: 1px solid #a4bec4; border-radius: 6px; padding-inline: 6px; color: #234952; background: #fff; }
+.planning-mark-tools input[data-mark-name] { width: 150px; }
+.planning-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse at 52% 34%, #eaf9f7, #cde0de);
+  opacity: var(--build-backdrop, 0);
+  pointer-events: none;
+}
+.room-planning.is-building :is(.planning-sidebar, .planning-model-footer) { opacity: var(--build-controls, 0); }
+.room-planning.is-building .planning-room.is-selected { transform: translateY(var(--build-lift, 0px)); transition: none; }
+.room-planning.is-building .planning-model { overflow: visible; }
+.room-planning.is-building .planning-stage { overflow: visible; }
+.planning-room [data-model-wall] { pointer-events: none; }
+.planning-drawing-screen { background: transparent; padding-block: 10px 0; }
+.planning-paper > svg { max-height: min(39vh, 415px); }
+.planning-sidebar .planning-actions { order: -1; padding-bottom: 12px; border-bottom: 1px solid var(--plan-line); }
+.planning-sidebar .planning-actions .planning-text { min-height: 36px; }
+@media (max-width: 600px) {
+  .planning-drawing-toolbar, .planning-drawing-footer { align-items: flex-start; }
+  .planning-drawing-footer .planning-primary { width: 100%; }
+}
+
+.room-planning.is-building .planning-floorplan { overflow: visible; animation: none; }

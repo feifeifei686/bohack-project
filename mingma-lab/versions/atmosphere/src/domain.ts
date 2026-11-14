@@ -1,9 +1,10 @@
+import type { IntakeItem } from '../../../shared/intake-contract'
 /** Browser-local demo rules. These functions do not call an AI service or verify construction feasibility. */
 export type Priority = 'must' | 'prefer'
 export type Answers = { layout: string; devices: string[]; cleaning: string; cabinet: string; window: string }
 export type Requirement = {
   id: string; title: string; description: string; room: string; category: string
-  priority: Priority; source: string; pending: string[]
+  priority: Priority; source: string; pending: string[]; intake?: IntakeItem
 }
 export type ProposalItem = {
   requirementId: string; commitment: 'yes' | 'partial' | 'no' | 'unknown'; text: string
