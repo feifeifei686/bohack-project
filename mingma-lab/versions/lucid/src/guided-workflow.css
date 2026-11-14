@@ -1,0 +1,157 @@
+/* Project navigation expresses order, access, and the immediate next task. */
+.lucid-app:not(.home-page) .studio-navigation { gap: 4px; }
+.lucid-app:not(.home-page) .nav-item { gap: 9px; min-height: 52px; padding: 6px 12px; text-align: left; flex: 1 0 auto; border: 0; background: transparent; font: inherit; font-size: 13px; text-decoration: none; }
+.lucid-app:not(.home-page) .nav-item > span:last-child { display: grid; gap: 3px; }
+.lucid-app:not(.home-page) .nav-item small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.lucid-app:not(.home-page) .flow-step-number { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: #eeedf3; color: #5c557e; font-size: 12px; font-weight: 600; }
+.lucid-app:not(.home-page) .nav-item.active .flow-step-number { background: #575674; color: #fff; }
+.lucid-app:not(.home-page) .nav-item.is-locked { color: #817a88; cursor: pointer; opacity: 1; }
+.lucid-app:not(.home-page) .nav-item.is-locked:hover { color: var(--accent); background: rgba(255,254,251,.72); }
+.home-nav-locked { color: #756d7d; opacity: .65; cursor: not-allowed; }
+.home-menu-panel .home-locked-link { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; padding: 11px 12px; font: inherit; font-size: 13px; color: #756d7d; opacity: .65; text-align: left; }
+.project-progress { max-width: 1220px; margin: 0 auto 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.project-progress-top { display: flex; justify-content: space-between; gap: 18px; font-size: 13px; color: var(--muted); }
+.project-progress-top b { color: var(--ink); }
+.project-progress progress { display: block; appearance: none; width: 100%; height: 4px; border: 0; margin-top: 8px; color: #575674; background: #e5e1eb; border-radius: 3px; overflow: hidden; }
+.project-progress progress::-webkit-progress-bar { background: #e5e1eb; }
+.project-progress progress::-webkit-progress-value { background: #575674; border-radius: 3px; }
+.project-progress progress::-moz-progress-bar { background: #575674; }
+.project-progress-guide { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.project-progress-guide p { margin: 0; }
+.project-progress-guide a { flex-shrink: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 4px; min-height: 32px; }
+.lucid-app:not(.home-page) :is(.page-heading, .task-context) { max-width: 1220px; margin-inline: auto; }
+.page-clarify .task-context { display: none; }
+.page-clarify .page-heading { margin-bottom: 18px; }
+.page-clarify .intake-spatial-layout { max-width: 1220px; margin-inline: auto; grid-template-columns: minmax(0, 760px) minmax(220px, 1fr); gap: 36px; }
+.page-clarify .intake-root { padding: 20px 28px 12px; background: rgba(255,254,251,.8); border-radius: 16px; box-shadow: 0 16px 42px rgba(98,83,114,.055); }
+.page-clarify .intake-spatial-layout .intake-root .intake-panel { padding: 0; }
+.page-clarify .intake-spatial-layout .intake-root .intake-option { border-radius: 10px; border: 1px solid var(--i-line); margin-bottom: 10px; padding: 16px; }
+.page-clarify .intake-spatial-layout .intake-root .intake-option:has(input:checked) { border-color: var(--i-accent); }
+.page-clarify .intake-space { margin-top: 8px; }
+.page-clarify .intake-space-caption { font-size: 13px; font-weight: 500; line-height: 1.8; }
+.page-clarify .intake-planning-context { font-size: 12px; }
+/* The question itself supplies instructions; keep the project strip to state and return. */
+.page-clarify .project-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 20px; padding-bottom: 10px; margin-bottom: 12px; }
+.page-clarify .project-progress-top { grid-column: 1; grid-row: 1; }
+.page-clarify .project-progress-guide { grid-column: 2; grid-row: 1; margin-top: 0; }
+.page-clarify .project-progress-guide p { display: none; }
+.page-clarify .project-progress > progress { grid-column: 1 / -1; margin-top: 5px; }
+.lucid-app.page-clarify .page-heading { margin-bottom: 14px; }
+.lucid-app.page-clarify .page-heading > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 20px; }
+.lucid-app.page-clarify .page-heading h1 { font-size: 28px; }
+.lucid-app.page-clarify .page-heading p { margin-top: 0; font-size: 13px; }
+.page-clarify .intake-questionnaire .intake-planning-context { margin-bottom: 6px; }
+.page-clarify .intake-questionnaire .intake-section-heading { margin-bottom: 4px; }
+.page-clarify .intake-questionnaire .intake-expression-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 5px; }
+.page-clarify .intake-questionnaire .intake-expression-tools .intake-label { margin: 0; }
+.page-clarify .intake-questionnaire .intake-expression-tools .intake-button { min-height: 44px; padding-inline: 0; font-size: 12px; }
+.page-clarify .intake-questionnaire .intake-input-meta { margin-bottom: 0; }
+.page-clarify .intake-questionnaire .intake-area-disclosure { margin-top: 4px; }
+@media (min-width: 1001px) {
+  .lucid-app.page-clarify .studio-main { padding-top: 16px; }
+  .page-clarify .intake-questionnaire .questionnaire-progress > div { margin-bottom: 4px; }
+  .page-clarify .intake-questionnaire .questionnaire-progress nav { margin-top: 0; }
+  .page-clarify .intake-questionnaire .questionnaire-progress { margin-bottom: 6px; }
+}
+@media (max-width: 600px) {
+  .lucid-app.page-clarify .page-heading h1 { font-size: 24px; }
+  .page-clarify .project-progress-top { gap: 8px; }
+  .page-clarify .project-progress { column-gap: 12px; }
+  .page-clarify .intake-questionnaire .intake-expression-tools { gap: 8px; }
+  .page-clarify .intake-questionnaire .intake-expression-tools .intake-label { font-size: 12px; }
+}
+.requirements-extras { margin-top: 28px; padding-block: 20px; border-top: 1px solid var(--line); }
+.requirements-extras > summary { cursor: pointer; color: var(--muted); font-size: 14px; min-height: 32px; }
+.requirements-extras[open] > summary { margin-bottom: 20px; }
+.merchant-waiting { display: flex; gap: 24px; padding: 32px 36px; margin: 24px 0 40px; background: rgba(255,254,251,.8); border-radius: 16px; }
+.merchant-waiting-symbol { color: var(--accent); padding-top: 4px; }
+.merchant-waiting h2 { font-family: var(--font-sans); font-size: 24px; margin: 0 0 8px; }
+.merchant-waiting p { margin: 0; color: var(--muted); font-size: 14px; }
+.merchant-waiting small { color: var(--muted); font-size: 12px; }
+.merchant-waiting ol { display: flex; flex-wrap: wrap; list-style: none; padding: 0; gap: 12px 24px; margin: 24px 0; }
+.merchant-waiting li { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.merchant-waiting li[aria-current] { color: var(--accent); font-weight: 700; }
+.proposal-samples { margin-bottom: 40px; }
+.proposal-samples-heading, .sample-detail-heading { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 24px; }
+.proposal-samples h2 { font-family: var(--font-sans); font-size: 23px; margin: 0 0 8px; }
+.proposal-samples-heading p, .sample-detail-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.proposal-sample-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.proposal-sample { display: grid; grid-template-columns: 40% 1fr; padding: 0; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,254,251,.72); overflow: hidden; text-align: left; font-family: inherit; color: var(--ink); transition: border-color 180ms ease, background 180ms ease; }
+.proposal-sample:hover, .proposal-sample.is-selected { border-color: var(--accent); background: #fffefa; }
+.proposal-sample img { display: block; width: 100%; height: 100%; min-height: 240px; object-fit: cover; }
+.proposal-sample-copy { display: flex; flex-direction: column; align-items: start; padding: 24px; }
+.proposal-sample-copy small { font-size: 12px; color: var(--muted); }
+.proposal-sample-copy strong { font-size: 20px; margin-top: 10px; font-weight: 600; }
+.proposal-sample-copy > span { font-size: 13px; color: var(--muted); line-height: 1.9; margin-top: 14px; }
+.proposal-sample-copy b { display: flex; align-items: center; gap: 8px; margin-top: 22px; color: var(--accent); font-size: 13px; font-weight: 600; }
+.sample-proposal-detail { margin-top: 32px; padding: 30px 0; border-block: 1px solid var(--line); scroll-margin-top: 24px; }
+.sample-proposal-detail > p { font-size: 15px; line-height: 1.9; color: var(--muted); }
+.sample-highlights { display: flex; gap: 16px 32px; flex-wrap: wrap; list-style: none; padding: 0; margin: 24px 0; }
+.sample-highlights li { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--accent); }
+.sample-proposal-detail summary { cursor: pointer; font-weight: 600; min-height: 44px; }
+.sample-proposal-detail dl { margin: 0; }
+.sample-proposal-detail dl > div { display: grid; grid-template-columns: minmax(140px, 25%) 1fr; gap: 24px; padding: 18px 0; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.8; }
+.sample-proposal-detail dt { font-weight: 600; }
+.sample-proposal-detail dd { margin: 0; color: var(--muted); }
+.sample-comparison-link { display: inline-flex; align-items: center; gap: 8px; padding-top: 16px; color: var(--accent); font-size: 14px; text-underline-offset: 4px; }
+@media (max-width: 1000px) {
+  .page-clarify .intake-spatial-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 800px; }
+  .page-clarify .intake-space { position: static; grid-row: 2; justify-self: stretch; width: 100%; max-width: 340px; margin: 0 auto; background: transparent; backdrop-filter: none; }
+  .proposal-sample { grid-template-columns: 1fr; }
+  .proposal-sample img { height: 210px; min-height: 0; }
+}
+@media (max-width: 600px) {
+  .lucid-app:not(.home-page) .studio-navigation { margin-top: 8px; }
+  .lucid-app:not(.home-page) .nav-item { min-height: 50px; padding: 6px 10px; }
+  .lucid-app:not(.home-page) .studio-main { padding-top: 16px; }
+  .project-progress { margin-bottom: 14px; padding-bottom: 10px; }
+  .project-progress-top { font-size: 12px; }
+  .project-progress-guide { gap: 12px; align-items: start; }
+  .project-progress-guide a { min-width: 60px; }
+  .page-clarify .intake-root { padding: 16px 16px 8px; }
+  .page-clarify .page-heading h1 { font-size: 26px; }
+  .proposal-sample-grid { grid-template-columns: 1fr; gap: 20px; }
+  .proposal-samples-heading, .sample-detail-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .proposal-sample img { height: 190px; }
+  .proposal-sample-copy { padding: 22px; }
+  .merchant-waiting { padding: 24px 20px; gap: 14px; }
+  .merchant-waiting h2 { font-size: 21px; }
+  .merchant-waiting ol { flex-direction: column; gap: 12px; margin-block: 20px; }
+  .sample-proposal-detail dl > div { grid-template-columns: 1fr; gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { .proposal-sample { transition: none; } }
+/* Keep the task near the top; the progress guide already provides context. */
+.page-compare .task-context, .page-requirements .task-context { display: none; }
+.page-compare .studio-main > :is(.merchant-waiting, .proposal-samples, .compare-toolbar, .comparison-scroll, .notice) { max-width: 1220px; margin-inline: auto; }
+.page-compare .page-heading, .page-requirements .page-heading { margin-bottom: 20px; }
+.page-compare .merchant-waiting { padding-block: 26px; }
+@media (min-width: 1001px) {
+  .page-clarify .intake-root { padding-top: 20px; }
+  .page-clarify .intake-questionnaire .questionnaire-progress { margin-bottom: 6px; }
+}
+@media (min-width: 1001px) and (max-height: 850px) {
+  .page-clarify .intake-questionnaire #intake-brief { min-height: 96px; height: 96px; }
+}
+
+/* Surface the decision before the full evidence table. */
+.comparison-insights { max-width: 1220px; margin: 0 auto 28px; }
+.comparison-insights > header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.comparison-insights h2 { margin: 0; font-size: 21px; line-height: 1.5; font-weight: 600; }
+.comparison-insights > header p { max-width: 65ch; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.comparison-insights ol { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+.comparison-insights li { border-bottom: 1px solid var(--line); }
+.comparison-insights li button { display: grid; grid-template-columns: 92px minmax(0, 1fr); column-gap: 20px; row-gap: 6px; width: 100%; min-height: 64px; padding: 18px 12px; border: 0; border-radius: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.comparison-insights li button:hover { background: rgba(255,254,251,.65); }
+.comparison-insights .insight-kind { align-self: start; width: fit-content; padding: 4px 9px; border-radius: 6px; background: #eeedf7; color: #5c557e; font-size: 12px; font-weight: 500; }
+.comparison-insights :is([data-kind='conflict'], [data-kind='must-conflict']) .insight-kind { color: #964f55; background: #faeded; }
+.comparison-insights :is([data-kind='partial'], [data-kind='unknown'], [data-kind='missing']) .insight-kind { color: #876039; background: #f6eee2; }
+.comparison-insights strong { align-self: center; font-size: 15px; line-height: 1.7; }
+.comparison-insights li p, .comparison-insights li small { grid-column: 2; margin: 0; font-size: 13px; line-height: 1.8; color: var(--muted); }
+.comparison-insights li small { font-size: 12px; color: var(--accent); }
+.comparison-insights + .proposal-samples { margin-top: 24px; }
+@media (max-width: 600px) {
+  .comparison-insights > header { display: block; }
+  .comparison-insights > header p { margin-top: 5px; }
+  .comparison-insights li button { grid-template-columns: minmax(0, 1fr); padding: 16px 2px; gap: 7px; }
+  .comparison-insights li p, .comparison-insights li small { grid-column: 1; }
+}

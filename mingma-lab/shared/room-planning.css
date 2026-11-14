@@ -11,6 +11,25 @@
   padding: clamp(14px, 2.25vw, 32px);
   margin-block: 10px 26px;
 }
+.plan-upload-note { font-size: .85rem !important; line-height: 1.7 !important; color: var(--plan-muted); max-width: 42ch; }
+.plan-source-status { min-height: 2.8em; font-size: .92rem; line-height: 1.6; }
+.plan-analysis { padding: 16px 0 0; color: var(--plan-ink); font-size: .88rem; line-height: 1.7; }
+.plan-analysis-actions { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.plan-analysis-actions span, .plan-corrections > p { color: var(--plan-muted); }
+.plan-analysis-notes { margin: 10px 0; padding-left: 20px; }
+.plan-corrections { margin-top: 14px; border-top: 1px solid var(--plan-line); padding-top: 10px; }
+.plan-corrections summary, .planning-mark-tools summary { cursor: pointer; padding: 10px 0; min-height: 44px; }
+.plan-room-edit { border-top: 1px solid var(--plan-line); }
+.plan-edit-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding-bottom: 16px; }
+.plan-edit-fields label { display: grid; gap: 4px; width: 76px; font-size: .8rem; }
+.plan-edit-fields .plan-edit-name { width: 150px; }
+.plan-edit-fields :is(input,select) { width: 100%; min-height: 40px; border: 1px solid var(--plan-line); border-radius: 6px; padding: 7px; background: var(--plan-surface); color: var(--plan-ink); }
+.plan-edit-fields button { border: 1px solid var(--plan-line); background: var(--plan-surface); color: var(--plan-green); border-radius: 6px; min-height: 44px; padding: 8px 12px; cursor: pointer; }
+.plan-edit-fields button:hover { border-color: var(--plan-green); }
+.plan-analysis :is(button,input,select,summary):focus-visible, .planning-mark-tools summary:focus-visible { outline: 2px solid var(--plan-green); outline-offset: 3px; }
+.planning-primary:disabled { opacity: .55; cursor: wait; }
+.planning-mark-tools { margin-top: 14px; }
+@media (max-width: 600px) { .plan-edit-fields label { flex: 1 1 65px; } .plan-edit-fields .plan-edit-name { flex-basis: 100%; } }
 .planning-header { margin-bottom: clamp(14px, 2vw, 23px); }
 .planning-back {
   display: inline-flex;
@@ -76,12 +95,12 @@
   position: relative;
   isolation: isolate;
 }
-.planning-room {
+.planning-room, .planning-label-lift {
   cursor: pointer;
   transform: translateY(0);
   transition: transform 510ms cubic-bezier(.25,.72,.3,1), filter 510ms ease;
 }
-.planning-room.is-selected { transform: translateY(-25px); filter: brightness(1.035); }
+.planning-room.is-selected, .planning-label-lift.is-selected { transform: translateY(-25px); filter: brightness(1.035); }
 .planning-tint { transition: fill 510ms ease; pointer-events: none; }
 .planning-room.is-selected .planning-tint { fill: #86ad89; fill-opacity: .2; }
 .planning-outline { stroke: transparent; stroke-width: 3; stroke-linejoin: round; pointer-events: none; }
@@ -95,8 +114,8 @@
 .planning-room-label { pointer-events: none; }
 .planning-room-label rect { fill: #fffdf6; fill-opacity: .94; }
 .planning-room-label text { fill: #334437; font-family: inherit; font-size: 18px; font-weight: 730; }
-.planning-room.is-selected .planning-room-label rect { fill: #355943; fill-opacity: 1; }
-.planning-room.is-selected .planning-room-label text { fill: white; }
+.planning-room.is-selected .planning-room-label rect, .planning-label-lift.is-selected rect { fill: #355943; fill-opacity: 1; }
+.planning-room.is-selected .planning-room-label text, .planning-label-lift.is-selected text { fill: white; }
 .planning-hotspot { outline: none; cursor: pointer; }
 .planning-hotspot circle { fill: #fffdf6; stroke: #355943; stroke-width: 1.8px; }
 .planning-hotspot circle:last-child { fill: #355943; stroke: none; }
@@ -253,7 +272,7 @@
   pointer-events: none;
 }
 .room-planning.is-building :is(.planning-sidebar, .planning-model-footer) { opacity: var(--build-controls, 0); }
-.room-planning.is-building .planning-room.is-selected { transform: translateY(var(--build-lift, 0px)); transition: none; }
+.room-planning.is-building .planning-room.is-selected, .room-planning.is-building .planning-label-lift.is-selected { transform: translateY(var(--build-lift, 0px)); transition: none; }
 .room-planning.is-building .planning-model { overflow: visible; }
 .room-planning.is-building .planning-stage { overflow: visible; }
 .planning-room [data-model-wall] { pointer-events: none; }
@@ -267,3 +286,7 @@
 }
 
 .room-planning.is-building .planning-floorplan { overflow: visible; animation: none; }
+
+.planning-label-lift { pointer-events: none; }
+.room-planning.is-building .planning-label-lift.is-selected { transform: translateY(var(--build-lift, 0px)); }
+@media (prefers-reduced-motion: reduce) { .planning-label-lift { transition: none; } }

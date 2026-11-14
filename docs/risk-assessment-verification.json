@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-14",
+  "scope": "澄境风险评估栏目与发布、方案选择检查点",
+  "frontend": {
+    "passed": 91,
+    "command": "npm --prefix mingma-lab test"
+  },
+  "apiRegression": {
+    "passed": 55,
+    "kind": "本地测试，不代表真实模型准确率"
+  },
+  "gatewayAndLifecycle": {
+    "passed": 6
+  },
+  "build": {
+    "typescript": [
+      "atmosphere",
+      "lucid",
+      "atelier"
+    ],
+    "frontend": "passed",
+    "api": "passed",
+    "warning": "保留现有 Three.js 分包大小提示"
+  },
+  "browser": {
+    "previewDesktop": {
+      "width": 1280,
+      "passed": 20
+    },
+    "lanMobile": {
+      "checks": [
+        "assessment is not accessible before requirements",
+        "all eight dimensions are visible",
+        "budget without evidence remains unevaluated",
+        "responsible person and evidence note are saved",
+        "saving a note does not silently resolve risks",
+        "dimension filtering explains missing evidence",
+        "editing source marks the old assessment stale",
+        "explicit reassessment replaces stale results",
+        "old task evidence is not inherited by a changed requirement",
+        "published requirement keeps its original source",
+        "site checks do not block publishing consultation requirements",
+        "must-item conflict blocks actual selection handler",
+        "blocked results do not offer a select action",
+        "acknowledgement cannot waive a mandatory conflict",
+        "a revised proposal clears explicit denial while keeping pending checks",
+        "revised proposal can be selected with pending work",
+        "selection record contains its immutable assessment snapshot",
+        "published requirement also retains assessment snapshot",
+        "project export includes assessment history and snapshots",
+        "assessment fits current viewport"
+      ],
+      "viewport": 390,
+      "url": "http://10.223.61.95:5188/#assessment"
+    },
+    "desktopVisual": {
+      "width": 1440,
+      "height": 1000,
+      "horizontalOverflow": false
+    },
+    "mobileVisual": {
+      "width": 390,
+      "height": 844,
+      "horizontalOverflow": false
+    }
+  },
+  "deployment": {
+    "command": "node scripts/local-deploy.mjs update",
+    "status": "web and api running",
+    "lanUrl": "http://10.223.61.95:5188/",
+    "lanHttp": 200
+  },
+  "boundaries": [
+    "本轮页面内存保存，刷新会清空；支持导出",
+    "四类咨询规则已接入；预算、预备金、报价与工期缺少依据时保留待评估",
+    "不生成FMEA评分或施工安全认证",
+    "真实模型、真实商家和跨设备同步不在本次评估栏目验证范围"
+  ],
+  "compatibilityFix": "局域网 HTTP 不提供 crypto.randomUUID 时，采用 getRandomValues 生成本地记录 UUID；局域网商家提交与评估闭环已通过"
+}

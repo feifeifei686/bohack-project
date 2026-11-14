@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "明码 AI 本地接口",
-    "description": "合成装修需求数据。五个成功请求会调用实际配置的模型；运行前确认目标服务和成本。自动生成自 schemas.ts 与 examples/，不要将真实密钥写入变量。",
+    "description": "合成装修需求数据。成功请求会调用实际配置的模型；运行前确认目标服务和成本。自动生成自 schemas.ts、requirement-insight.ts 与 examples/，不要将真实密钥写入变量。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -230,6 +230,43 @@
               "pm.test('structured result and manual confirmation', () => { pm.expect(body.requestId).to.be.a('string'); pm.expect(body.data).to.be.an('object'); pm.expect(body.meta.requiresHumanConfirmation).to.equal(true); pm.expect(body.meta.model).to.be.a('string'); pm.expect(body.meta.usage.totalTokens).to.be.a('number'); });",
               "pm.test('warnings available', () => pm.expect(body.data.warnings).to.be.an('array'));",
               "pm.test('intake groups and questions', () => { pm.expect(body.data.items).to.be.an('array').that.is.not.empty; pm.expect(body.data.questions.length).to.be.at.most(2); const ids = body.data.items.map(x => x.id); pm.expect(new Set(ids).size).to.equal(ids.length); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "提交后推演需求关系与量化结论",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requirementVersion\": 1,\n  \"requirements\": [\n    {\n      \"id\": \"K01\",\n      \"title\": \"洗碗机与配套\",\n      \"description\": \"预留洗碗机安装位，说明供水、排水与电源配套。\",\n      \"room\": \"厨房\",\n      \"category\": \"水电与安装\",\n      \"priority\": \"must\",\n      \"source\": \"用户确认\",\n      \"pending\": [\n        \"设备尺寸待确认\",\n        \"现有供排水接口待现场核实\"\n      ]\n    },\n    {\n      \"id\": \"K02\",\n      \"title\": \"保留现有布局\",\n      \"description\": \"尽量保留水槽与冰箱的现有位置，如需移动请先说明原因。\",\n      \"room\": \"厨房\",\n      \"category\": \"布局\",\n      \"priority\": \"prefer\",\n      \"source\": \"用户确认\",\n      \"pending\": [\n        \"可调整范围待业主确认\"\n      ]\n    }\n  ],\n  \"projectContext\": [\n    {\n      \"id\": \"household\",\n      \"text\": \"两人经常做饭，希望清洁更省心。\",\n      \"confirmed\": true\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{baseUrl}}/api/ai/requirement-insight",
+        "description": "针对已提交的需求快照再调用一次 DeepSeek Flash，给出逐项表达清晰度、原文依据、跨需求关联与后续建议。不会修改或发布需求，不输出内部思维链。每条需求恰好一个 finding；关联必须引用两个端点且不能自连或重复。服务端保留原有待确认项，并按校验后的结果计算条数与清晰占比，不接受模型评分。表达清晰不代表施工可行。"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json(); const input = JSON.parse(pm.request.body.raw);",
+              "pm.test('Flash advisory response for this version', () => { pm.expect(body.data.requirementVersion).to.equal(input.requirementVersion); pm.expect(body.meta.model).to.equal('deepseek-flash'); pm.expect(body.meta.requiresHumanConfirmation).to.equal(true); });",
+              "pm.test('all requirements covered and metrics derived', () => { const m = body.data.metrics; const f = body.data.findings; pm.expect(f.map(x => x.requirementId).sort()).to.eql(input.requirements.map(x => x.id).sort()); pm.expect(m.total).to.equal(input.requirements.length); pm.expect(m.clear).to.equal(f.filter(x => x.clarity === 'clear').length); pm.expect(m.clarityPercent).to.equal(Math.round(m.clear / m.total * 100)); pm.expect(m.pendingChecks).to.equal(new Set(f.flatMap(x => x.checks)).size); });"
             ]
           }
         }

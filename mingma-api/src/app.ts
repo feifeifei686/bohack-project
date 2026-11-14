@@ -1,3 +1,4 @@
+import { floorplanMessages, validateFloorplanInput, validateFloorplanOutput } from './floorplan.ts'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
@@ -6,6 +7,7 @@ import { isLoopback, type Config } from './config.ts'
 import { complete } from './provider.ts'
 import { successSchema, type Operation } from './schemas.ts'
 import { PROMPT_VERSION, validateInput, buildMessages, validateOutput } from './operations.ts'
+import { INSIGHT_PROMPT_VERSION, RequirementInsightSuccess, validateInsightInput, buildInsightMessages, validateInsightOutput } from './requirement-insight.ts'
 
 export type SafeLog = (event: { requestId: string; method: string; path: string; status: number; durationMs: number }) => void
 function send(res: ServerResponse, status: number, data: unknown) {
@@ -15,7 +17,7 @@ function send(res: ServerResponse, status: number, data: unknown) {
 }
 async function readJson(req: IncomingMessage, limit: number) {
   if (!/^application\/json(?:\s*;|\s*$)/i.test(req.headers['content-type'] || '') || (req.headers['content-encoding'] && req.headers['content-encoding'] !== 'identity')) throw new ApiError(415, 'UNSUPPORTED_MEDIA_TYPE', '请使用 application/json 请求体。')
-  if (Number(req.headers['content-length'] || 0) > limit) { req.resume(); throw new ApiError(413, 'PAYLOAD_TOO_LARGE', '请求体不能超过 128 KiB。') }
+  if (Number(req.headers['content-length'] || 0) > limit) { req.resume(); throw new ApiError(413, 'PAYLOAD_TOO_LARGE', `请求体不能超过 ${Math.round(limit / 1024)} KiB。`) }
   const chunks = await new Promise<Buffer[]>((resolve, reject) => {
     const parts: Buffer[] = []
     let size = 0
@@ -26,7 +28,7 @@ async function readJson(req: IncomingMessage, limit: number) {
       if (size > limit) {
         failed = true
         parts.length = 0
-        reject(new ApiError(413, 'PAYLOAD_TOO_LARGE', '请求体不能超过 128 KiB。'))
+        reject(new ApiError(413, 'PAYLOAD_TOO_LARGE', `请求体不能超过 ${Math.round(limit / 1024)} KiB。`))
       } else parts.push(chunk)
     })
     req.on('end', () => { if (!failed) resolve(parts) })
@@ -51,9 +53,11 @@ export function createApp(config: Config, log: SafeLog = () => {}) {
     const started = performance.now()
     const abort = new AbortController()
     const path = (req.url || '/').split('?')[0] || '/'
+    const isFloorplan = path === '/api/ai/floorplan'
+    const isInsight = path === '/api/ai/requirement-insight'
     const publicPath = path === '/api/health' || path === '/api/openapi.json'
     const name = path.match(/^\/api\/ai\/(clarify|requirements|review|explain|intake)$/)?.[1] as Operation | undefined
-    const logPath = publicPath || name ? path : '/unknown'
+    const logPath = publicPath || name || isFloorplan || isInsight ? path : '/unknown'
     res.setHeader('X-Request-ID', requestId)
     res.setHeader('Vary', 'Origin')
     res.on('close', () => { if (!res.writableEnded) abort.abort() })
@@ -71,13 +75,13 @@ export function createApp(config: Config, log: SafeLog = () => {}) {
         res.setHeader('Access-Control-Allow-Origin', origin)
         res.setHeader('Access-Control-Expose-Headers', 'X-Request-ID')
       }
-      if (!publicPath && !name) throw new ApiError(404, 'NOT_FOUND', '接口不存在。')
+      if (!publicPath && !name && !isFloorplan && !isInsight) throw new ApiError(404, 'NOT_FOUND', '接口不存在。')
       if (req.method === 'OPTIONS') {
         res.setHeader('Access-Control-Allow-Methods', publicPath ? 'GET, OPTIONS' : 'POST, OPTIONS')
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         res.writeHead(204); res.end(); return
       }
-      if ((publicPath && req.method !== 'GET') || (name && req.method !== 'POST')) {
+      if ((publicPath && req.method !== 'GET') || ((name || isFloorplan || isInsight) && req.method !== 'POST')) {
         res.setHeader('Allow', publicPath ? 'GET, OPTIONS' : 'POST, OPTIONS')
         throw new ApiError(405, 'METHOD_NOT_ALLOWED', '该接口不支持此请求方法。')
       }
@@ -96,13 +100,25 @@ export function createApp(config: Config, log: SafeLog = () => {}) {
       const bucket = limits.get(key) || { count: 0, reset: now + 60000 }
       if (bucket.count >= config.requestsPerMinute) throw new ApiError(429, 'RATE_LIMITED', '请求过于频繁，请稍后重试。', true)
       bucket.count++; limits.set(key, bucket)
-      const raw = await readJson(req, config.bodyLimitBytes)
+      const raw = await readJson(req, isFloorplan ? 6 * 1024 * 1024 + 1024 : config.bodyLimitBytes)
       const operation = name!
-      const input = validateInput(operation, raw)
+      const imageInput = isFloorplan ? validateFloorplanInput(raw) : undefined
+      const insightInput = isInsight ? validateInsightInput(raw) : undefined
+      const input = !isFloorplan && !isInsight ? validateInput(operation, raw) : undefined
       if (active >= config.maxConcurrent) throw new ApiError(429, 'AI_BUSY', '当前 AI 请求较多，请稍后重试。', true)
       active++; reserved = true
-      const result = await complete(config, buildMessages(operation, input), abort.signal)
-      const data = validateOutput(operation, input, result.raw)
+      if (isInsight) {
+        const result = await complete({ ...config, model: 'deepseek-flash', maxOutputTokens: Math.max(config.maxOutputTokens, 12000) }, buildInsightMessages(insightInput!), abort.signal)
+        const response = RequirementInsightSuccess.safeParse({ requestId, data: validateInsightOutput(insightInput!, result.raw), meta: { model: result.model, promptVersion: INSIGHT_PROMPT_VERSION, durationMs: Math.round(performance.now() - started), requiresHumanConfirmation: true, usage: result.usage } })
+        if (!response.success) throw new ApiError(502, 'AI_INVALID_OUTPUT', '需求推演响应未通过最终契约校验。', true)
+        send(res, 200, response.data); return
+      }
+      if (isFloorplan) {
+        const result = await complete({ ...config, model: 'deepseek-flash', timeoutMs: Math.min(120000, config.timeoutMs * 2), maxOutputTokens: 14000 }, floorplanMessages(imageInput!.image), abort.signal)
+        send(res, 200, { requestId, data: validateFloorplanOutput(result.raw), meta: { model: result.model, requiresHumanConfirmation: true, durationMs: Math.round(performance.now() - started), usage: result.usage } }); return
+      }
+      const result = await complete(config, buildMessages(operation, input!), abort.signal)
+      const data = validateOutput(operation, input!, result.raw)
       const response = successSchema(operation).safeParse({ requestId, data, meta: { model: result.model, promptVersion: PROMPT_VERSION, durationMs: Math.round(performance.now() - started), requiresHumanConfirmation: true, usage: result.usage } })
       if (!response.success) throw new ApiError(502, 'AI_INVALID_OUTPUT', '模型响应未通过最终契约校验。', true)
       send(res, 200, response.data)

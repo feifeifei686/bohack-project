@@ -47,8 +47,8 @@ export function createLocalWeb({ root = projectRoot, apiPort = 5199, lanEnabled 
     const rawPath = (req.url || '/').split('?')[0]
     let lanIntake = false
     if (!loopback && (rawPath.startsWith('/api/') || rawPath.startsWith('/__mingma_local/'))) {
-      if (rawPath !== '/api/ai/intake' || req.method !== 'POST') {
-        json(res, 403, { requestId: randomUUID(), error: { code: 'LOCAL_ONLY', message: '该接口仅限本机访问。局域网可直接使用需求共创。', retryable: false } }); return
+      if (!['/api/ai/intake', '/api/ai/floorplan', '/api/ai/requirement-insight'].includes(rawPath) || req.method !== 'POST') {
+        json(res, 403, { requestId: randomUUID(), error: { code: 'LOCAL_ONLY', message: '该接口仅限本机访问。局域网可直接使用需求共创、需求分析和户型识别。', retryable: false } }); return
       }
       if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) {
         json(res, 403, { requestId: randomUUID(), error: { code: 'ORIGIN_NOT_ALLOWED', message: '请从这台电脑提供的网页使用 AI。', retryable: false } }); return

@@ -1078,6 +1078,735 @@
         }
       }
     },
+    "/api/ai/requirement-insight": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "requirementInsight",
+        "summary": "提交后推演需求关系与量化结论",
+        "description": "针对已提交的需求快照再调用一次 DeepSeek Flash，给出逐项表达清晰度、原文依据、跨需求关联与后续建议。不会修改或发布需求，不输出内部思维链。每条需求恰好一个 finding；关联必须引用两个端点且不能自连或重复。服务端保留原有待确认项，并按校验后的结果计算条数与清晰占比，不接受模型评分。表达清晰不代表施工可行。",
+        "security": [
+          {},
+          {
+            "localAccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequirementInsightRequest"
+              },
+              "example": {
+                "requirementVersion": 1,
+                "requirements": [
+                  {
+                    "id": "K01",
+                    "title": "洗碗机与配套",
+                    "description": "预留洗碗机安装位，说明供水、排水与电源配套。",
+                    "room": "厨房",
+                    "category": "水电与安装",
+                    "priority": "must",
+                    "source": "用户确认",
+                    "pending": [
+                      "设备尺寸待确认",
+                      "现有供排水接口待现场核实"
+                    ]
+                  },
+                  {
+                    "id": "K02",
+                    "title": "保留现有布局",
+                    "description": "尽量保留水槽与冰箱的现有位置，如需移动请先说明原因。",
+                    "room": "厨房",
+                    "category": "布局",
+                    "priority": "prefer",
+                    "source": "用户确认",
+                    "pending": [
+                      "可调整范围待业主确认"
+                    ]
+                  }
+                ],
+                "projectContext": [
+                  {
+                    "id": "household",
+                    "text": "两人经常做饭，希望清洁更省心。",
+                    "confirmed": true
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "有需求原文依据的分析建议与服务端派生统计。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequirementInsightResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_JSON / VALIDATION_ERROR / REQUEST_ABORTED：输入格式、字段或编号不合法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED：已配置访问令牌时，缺少或无效的服务令牌。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "METHOD_NOT_ALLOWED：该接口不支持此方法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "REQUIREMENT_VERSION_MISMATCH：方案引用的需求版本不是本次基准。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "PAYLOAD_TOO_LARGE：请求体超过 128 KiB。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE：请使用未压缩的 application/json。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED / AI_BUSY / AI_UPSTREAM_RATE_LIMIT：本地限流、并发已满或模型服务限流。",
+            "headers": {
+              "Retry-After": {
+                "description": "建议等待的秒数。",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "REQUEST_CANCELLED：客户端已中断；连接关闭时通常无法接收该响应。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR：服务内部错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "AI_UPSTREAM_AUTH / AI_UPSTREAM_QUOTA / AI_UPSTREAM_REJECTED / AI_REFUSED / AI_OUTPUT_TRUNCATED / AI_INVALID_OUTPUT：模型服务拒绝、返回不完整内容或输出校验未通过。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI_NOT_CONFIGURED / AI_UPSTREAM_UNAVAILABLE：缺少服务端密钥或模型服务不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "AI_TIMEOUT：模型服务超过配置的等待时间。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/floorplan": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "operationId": "recognizeFloorplan",
+        "summary": "识别上传户型图中的房间、门窗和家具",
+        "description": "接受单张 JPEG/PNG/WebP base64 data URL，解码后至多4MiB。完整图像坐标归一化为0..1000；不生成图中不存在的家具，不推断真实尺寸。图片仅用于本次DeepSeek视觉识别，不写入日志或磁盘。局域网同源可调用。结果需用户校对。",
+        "security": [
+          {},
+          {
+            "localAccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FloorplanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "候选几何与来源模型，等待校对。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "rooms": {
+                          "maxItems": 24,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 30
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "living",
+                                  "bedroom",
+                                  "kitchen",
+                                  "bathroom",
+                                  "balcony",
+                                  "entry",
+                                  "dining",
+                                  "corridor",
+                                  "other"
+                                ]
+                              },
+                              "polygon": {
+                                "minItems": 3,
+                                "maxItems": 30,
+                                "type": "array",
+                                "items": {
+                                  "type": "array",
+                                  "prefixItems": [
+                                    {
+                                      "type": "number",
+                                      "minimum": 0,
+                                      "maximum": 1000
+                                    },
+                                    {
+                                      "type": "number",
+                                      "minimum": 0,
+                                      "maximum": 1000
+                                    }
+                                  ],
+                                  "items": false,
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                }
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "kind",
+                              "polygon",
+                              "confidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "walls": {
+                          "maxItems": 160,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "roomId": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                              },
+                              "start": {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  },
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  }
+                                ],
+                                "items": false,
+                                "minItems": 2,
+                                "maxItems": 2
+                              },
+                              "end": {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  },
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  }
+                                ],
+                                "items": false,
+                                "minItems": 2,
+                                "maxItems": 2
+                              }
+                            },
+                            "required": [
+                              "roomId",
+                              "start",
+                              "end"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "openings": {
+                          "maxItems": 80,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "roomId": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "door",
+                                  "window"
+                                ]
+                              },
+                              "start": {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  },
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  }
+                                ],
+                                "items": false,
+                                "minItems": 2,
+                                "maxItems": 2
+                              },
+                              "end": {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  },
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  }
+                                ],
+                                "items": false,
+                                "minItems": 2,
+                                "maxItems": 2
+                              }
+                            },
+                            "required": [
+                              "roomId",
+                              "kind",
+                              "start",
+                              "end"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "furniture": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                              },
+                              "roomId": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "bed",
+                                  "sofa",
+                                  "table",
+                                  "chair",
+                                  "cabinet",
+                                  "counter",
+                                  "sink",
+                                  "stove",
+                                  "toilet",
+                                  "bathtub",
+                                  "shower",
+                                  "washer",
+                                  "fridge"
+                                ]
+                              },
+                              "bounds": {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  },
+                                  {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  },
+                                  {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000
+                                  },
+                                  {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 1000
+                                  }
+                                ],
+                                "items": false,
+                                "minItems": 4,
+                                "maxItems": 4
+                              },
+                              "rotation": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 360
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "roomId",
+                              "kind",
+                              "bounds",
+                              "rotation",
+                              "confidence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "warnings": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 300
+                          }
+                        }
+                      },
+                      "required": [
+                        "rooms",
+                        "walls",
+                        "openings",
+                        "furniture",
+                        "warnings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string"
+                        },
+                        "requiresHumanConfirmation": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "durationMs": {
+                          "type": "number"
+                        },
+                        "usage": {
+                          "type": "object",
+                          "properties": {
+                            "promptTokens": {
+                              "type": "number"
+                            },
+                            "completionTokens": {
+                              "type": "number"
+                            },
+                            "totalTokens": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "promptTokens",
+                            "completionTokens",
+                            "totalTokens"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "model",
+                        "requiresHumanConfirmation",
+                        "durationMs",
+                        "usage"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "requestId",
+                    "data",
+                    "meta"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_JSON / VALIDATION_ERROR / REQUEST_ABORTED：输入格式、字段或编号不合法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHORIZED：已配置访问令牌时，缺少或无效的服务令牌。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGIN_NOT_ALLOWED / HOST_NOT_ALLOWED：网页来源或主机名不被允许。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "METHOD_NOT_ALLOWED：该接口不支持此方法。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "REQUIREMENT_VERSION_MISMATCH：方案引用的需求版本不是本次基准。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "图片请求体超过6MiB。"
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE：请使用未压缩的 application/json。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "FLOORPLAN_NOT_FOUND：未识别到清晰户型，请换图或手工标注。"
+          },
+          "429": {
+            "description": "RATE_LIMITED / AI_BUSY / AI_UPSTREAM_RATE_LIMIT：本地限流、并发已满或模型服务限流。",
+            "headers": {
+              "Retry-After": {
+                "description": "建议等待的秒数。",
+                "schema": {
+                  "type": "integer",
+                  "example": 60
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "REQUEST_CANCELLED：客户端已中断；连接关闭时通常无法接收该响应。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR：服务内部错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "AI_UPSTREAM_AUTH / AI_UPSTREAM_QUOTA / AI_UPSTREAM_REJECTED / AI_REFUSED / AI_OUTPUT_TRUNCATED / AI_INVALID_OUTPUT：模型服务拒绝、返回不完整内容或输出校验未通过。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI_NOT_CONFIGURED / AI_UPSTREAM_UNAVAILABLE：缺少服务端密钥或模型服务不可用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "AI_TIMEOUT：模型服务超过配置的等待时间。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -3294,6 +4023,742 @@
           "requestId",
           "data",
           "meta"
+        ],
+        "additionalProperties": false
+      },
+      "FloorplanRequest": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "maxLength": 6291456,
+            "pattern": "^data:image\\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "additionalProperties": false
+      },
+      "RequirementInsightRequest": {
+        "type": "object",
+        "properties": {
+          "requirementVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "requirements": {
+            "minItems": 1,
+            "maxItems": 80,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "room": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "category": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": [
+                    "must",
+                    "prefer"
+                  ]
+                },
+                "source": {
+                  "default": "",
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "pending": {
+                  "maxItems": 40,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2100
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "description",
+                "room",
+                "category",
+                "priority",
+                "pending"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "projectContext": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "household",
+                    "schedule",
+                    "confirmation"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                },
+                "confirmed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "text",
+                "confirmed"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "requirementVersion",
+          "requirements"
+        ],
+        "additionalProperties": false
+      },
+      "RequirementInsightResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 700
+              },
+              "findings": {
+                "minItems": 1,
+                "maxItems": 80,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "requirementId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "clarity": {
+                      "type": "string",
+                      "enum": [
+                        "clear",
+                        "needs_detail"
+                      ]
+                    },
+                    "rationale": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 700
+                    },
+                    "evidence": {
+                      "minItems": 1,
+                      "maxItems": 5,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "checks": {
+                      "maxItems": 60,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2100
+                      }
+                    }
+                  },
+                  "required": [
+                    "requirementId",
+                    "clarity",
+                    "rationale",
+                    "evidence",
+                    "checks"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "connections": {
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "fromId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "toId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "dependency",
+                        "synergy",
+                        "tradeoff"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 600
+                    },
+                    "evidence": {
+                      "minItems": 2,
+                      "maxItems": 6,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sourceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        },
+                        "required": [
+                          "sourceId",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "fromId",
+                    "toId",
+                    "kind",
+                    "reason",
+                    "evidence"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "nextSteps": {
+                "maxItems": 6,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "requirementIds": {
+                      "minItems": 1,
+                      "maxItems": 80,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,64}$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "reason",
+                    "requirementIds"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "warnings": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              },
+              "requirementVersion": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "metrics": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "must": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "clear": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "needsDetail": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "connections": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "pendingChecks": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "clarityPercent": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                },
+                "required": [
+                  "total",
+                  "must",
+                  "clear",
+                  "needsDetail",
+                  "connections",
+                  "pendingChecks",
+                  "clarityPercent"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "summary",
+              "findings",
+              "connections",
+              "nextSteps",
+              "warnings",
+              "requirementVersion",
+              "metrics"
+            ],
+            "additionalProperties": false
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "promptVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "durationMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "requiresHumanConfirmation": {
+                "type": "boolean",
+                "const": true
+              },
+              "usage": {
+                "type": "object",
+                "properties": {
+                  "promptTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "completionTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "totalTokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "promptTokens",
+                  "completionTokens",
+                  "totalTokens"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "model",
+              "promptVersion",
+              "durationMs",
+              "requiresHumanConfirmation",
+              "usage"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestId",
+          "data",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "FloorplanResult": {
+        "type": "object",
+        "properties": {
+          "rooms": {
+            "maxItems": 24,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 30
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "living",
+                    "bedroom",
+                    "kitchen",
+                    "bathroom",
+                    "balcony",
+                    "entry",
+                    "dining",
+                    "corridor",
+                    "other"
+                  ]
+                },
+                "polygon": {
+                  "minItems": 3,
+                  "maxItems": 30,
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000
+                      },
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "kind",
+                "polygon",
+                "confidence"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "walls": {
+            "maxItems": 160,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "roomId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                },
+                "start": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "end": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "required": [
+                "roomId",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "openings": {
+            "maxItems": 80,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "roomId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "door",
+                    "window"
+                  ]
+                },
+                "start": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "end": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              "required": [
+                "roomId",
+                "kind",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "furniture": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                },
+                "roomId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "bed",
+                    "sofa",
+                    "table",
+                    "chair",
+                    "cabinet",
+                    "counter",
+                    "sink",
+                    "stove",
+                    "toilet",
+                    "bathtub",
+                    "shower",
+                    "washer",
+                    "fridge"
+                  ]
+                },
+                "bounds": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1000
+                    },
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000
+                    },
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 4,
+                  "maxItems": 4
+                },
+                "rotation": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 360
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "id",
+                "roomId",
+                "kind",
+                "bounds",
+                "rotation",
+                "confidence"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "warnings": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            }
+          }
+        },
+        "required": [
+          "rooms",
+          "walls",
+          "openings",
+          "furniture",
+          "warnings"
         ],
         "additionalProperties": false
       }

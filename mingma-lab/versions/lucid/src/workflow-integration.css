@@ -1,0 +1,59 @@
+/* The task and forward/back actions now live in one persistent place. */
+.has-workflow-dock .task-context,
+.has-workflow-dock .planning-back,
+.has-workflow-dock [data-plan-step='build'],
+.has-workflow-dock [data-action='plan-current-room'],
+.has-workflow-dock .document-toolbar [data-action='publish'],
+.has-workflow-dock .document-toolbar [data-action='go-compare'],
+.has-workflow-dock .document-toolbar [data-action='go-clarify'],
+.has-workflow-dock .ri-actions,
+.has-workflow-dock .page-heading .heading-actions:empty,
+.has-workflow-dock .notice [data-action='go-space'],
+.has-workflow-dock .project-space-guidance,
+.has-workflow-dock.page-vendor .page-heading [data-action='go-compare'],
+.has-workflow-dock.page-vendor .sticky-actions {
+  display: none;
+}
+.has-workflow-dock .intake-external-navigation [data-intake-action='start'],
+.has-workflow-dock .intake-external-navigation [data-intake-action='answer'],
+.has-workflow-dock .intake-external-navigation [data-intake-action='review-confirm'],
+.has-workflow-dock .intake-external-navigation [data-intake-action='adopt'],
+.has-workflow-dock .intake-external-navigation [data-intake-action='previous-question'],
+.has-workflow-dock .intake-external-navigation [data-intake-action='review-prev'],
+.has-workflow-dock .intake-external-navigation [data-intake-action='review-last'],
+.has-workflow-dock .intake-external-navigation [data-intake-action='show-draft'] {
+  display: none;
+}
+.has-workflow-dock .intake-external-navigation .intake-request-dock {
+  position: relative;
+  inset: auto;
+  width: auto;
+  max-width: none;
+  transform: none;
+  margin: 20px 0 0;
+  z-index: auto;
+}
+.has-workflow-dock .intake-external-navigation .questionnaire-progress > div > span,
+.has-workflow-dock .intake-external-navigation .questionnaire-progress > progress {
+  display: none;
+}
+.has-workflow-dock .intake-external-navigation .questionnaire-progress nav {
+  margin-block: 8px 16px;
+}
+.has-workflow-dock .project-progress { margin-bottom: 24px; }
+.has-workflow-dock .ri-footer { padding-bottom: 0; }
+.has-workflow-dock .plan-entry-actions { margin-bottom: 16px; }
+@media (max-width: 600px) {
+  .has-workflow-dock .project-progress { margin-bottom: 16px; }
+}
+@media (max-width: 360px) {
+  .has-workflow-dock .studio-brand small { display: none; }
+  .has-workflow-dock .studio-header .header-main { gap: 10px; }
+}
+.room-work-overview { margin:28px 0; padding:24px; background:rgba(255,254,251,.8); border-radius:16px; }
+.room-work-overview h2 { font-size:22px; margin:0 0 8px; }
+.room-work-overview p { color:#6d6875; margin:0 0 18px; }
+.room-work-overview > div { display:flex; flex-wrap:wrap; gap:12px; }
+.room-work-overview button { display:grid; gap:7px; text-align:left; padding:14px 20px; min-height:70px; background:#f4f0f8; color:#575674; border:1px solid #d9d2e3; border-radius:10px; }
+.room-work-overview small { font-size:12px; }
+.room-work-overview button:focus-visible { outline:3px solid #817199; outline-offset:3px; }

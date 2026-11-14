@@ -1,0 +1,77 @@
+/* A single task at a time. Opted into by the Lucid project only. */
+.intake-questionnaire { --i-accent: #575674; --i-muted: #6d6875; }
+.intake-questionnaire .questionnaire-progress { margin-bottom: 12px; }
+.intake-questionnaire .questionnaire-progress > div { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 12px; }
+.intake-questionnaire .questionnaire-progress strong { font-size: 15px; }
+.intake-questionnaire .questionnaire-progress .intake-save-state { display: inline; margin-left: 12px; color: var(--i-muted); font-size: 12px; font-weight: 400; }
+.intake-questionnaire .questionnaire-progress > div > span { color: var(--i-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.intake-questionnaire progress { display: block; appearance: none; width: 100%; height: 5px; border: 0; border-radius: 3px; color: var(--i-accent); background: var(--i-soft); overflow: hidden; }
+.intake-questionnaire progress::-webkit-progress-bar { background: var(--i-soft); }
+.intake-questionnaire progress::-webkit-progress-value { background: var(--i-accent); border-radius: 3px; }
+.intake-questionnaire progress::-moz-progress-bar { background: var(--i-accent); }
+.intake-questionnaire .questionnaire-progress nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.intake-questionnaire .questionnaire-progress nav button { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 0; border: 0; color: var(--i-muted); background: transparent; font-size: 13px; }
+.intake-questionnaire .questionnaire-progress nav button[aria-current] { color: var(--i-accent); font-weight: 700; }
+.intake-questionnaire .questionnaire-progress nav button span { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--i-line); border-radius: 50%; font-size: 11px; }
+.intake-questionnaire .questionnaire-progress nav button[aria-current] span { background: var(--i-accent); color: #fff; }
+.intake-questionnaire .questionnaire-sheet { padding: 0; min-width: 0; }
+.intake-questionnaire .questionnaire-sheet h2 { font-size: 24px; }
+.intake-questionnaire .questionnaire-review-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.intake-questionnaire .questionnaire-review-heading > span { flex-shrink: 0; font-size: 13px; color: var(--i-muted); font-variant-numeric: tabular-nums; }
+.intake-questionnaire .questionnaire-sheet .intake-item { padding-top: 24px; border: 0; }
+.intake-questionnaire .questionnaire-sheet .intake-item h3 { font-size: 21px; }
+.intake-questionnaire .questionnaire-sheet .intake-description { font-size: 16px; line-height: 1.9; margin-top: 18px; }
+.intake-questionnaire .questionnaire-technical, .intake-questionnaire .questionnaire-understanding { border-bottom: 1px solid var(--i-line); margin-block: 20px; padding-block: 12px; }
+.intake-questionnaire details > summary { min-height: 32px; color: var(--i-accent); cursor: pointer; font-size: 13px; line-height: 1.8; }
+.intake-questionnaire details[open] > summary { margin-bottom: 16px; }
+.intake-questionnaire .questionnaire-technical .intake-pending { margin-bottom: 0; }
+.intake-questionnaire .intake-item .intake-editor { margin: 0; border-bottom: 1px solid var(--i-line); }
+.intake-questionnaire .questionnaire-understanding { margin-top: 0; }
+.intake-questionnaire .questionnaire-question-progress { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-block: 24px; color: var(--i-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.intake-questionnaire .questionnaire-question-progress progress { flex-basis: 100%; }
+.intake-questionnaire .questionnaire-resolution { margin-top: 20px; padding: 18px 20px; border-radius: 12px; background: var(--i-soft); }
+.intake-questionnaire .questionnaire-resolution h3 { font-size: 15px; margin-bottom: 6px; }
+.intake-questionnaire .questionnaire-resolution .intake-button { margin-top: 12px; }
+.intake-questionnaire .questionnaire-resolution-form:not([hidden]) { display: grid; gap: 12px; margin-top: 16px; }
+.intake-questionnaire .questionnaire-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-top: 24px; margin-top: 24px; border-top: 1px solid var(--i-line); }
+.intake-questionnaire .questionnaire-actions > .intake-button--primary { margin-left: auto; }
+.intake-questionnaire .questionnaire-actions .intake-button { min-height: 48px; }
+.intake-questionnaire .questionnaire-footnote { margin-top: 14px; }
+.intake-questionnaire .questionnaire-sheet.intake-adopt { display: block; background: transparent; border: 0; padding: 0; }
+.intake-questionnaire .questionnaire-summary { list-style: none; padding: 0; margin-block: 24px; }
+.intake-questionnaire .questionnaire-summary li { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-block: 18px; border-bottom: 1px solid var(--i-line); }
+.intake-questionnaire .questionnaire-summary strong, .intake-questionnaire .questionnaire-summary small { display: block; }
+.intake-questionnaire .questionnaire-summary strong { font-size: 15px; }
+.intake-questionnaire .questionnaire-summary small { margin-top: 6px; }
+.intake-questionnaire .questionnaire-summary button { flex-shrink: 0; }
+.intake-questionnaire .questionnaire-more { margin-top: 24px; }
+.intake-questionnaire .questionnaire-more button { margin-right: 20px; }
+.intake-questionnaire .intake-bottom { margin-top: 32px; }
+.intake-questionnaire .intake-conversation .intake-question h3 { font-size: 24px; }
+.intake-questionnaire .intake-conversation .intake-question { padding-top: 8px; border-top: 0; }
+.intake-questionnaire[data-variant='lucid'] .intake-section-heading { margin-bottom: 14px; }
+.intake-questionnaire[data-variant='lucid'] .intake-section-heading p { margin-top: 6px; font-size: 14px; line-height: 1.7; }
+.intake-questionnaire[data-variant='lucid'] .intake-label { margin-top: 12px; }
+.intake-questionnaire[data-variant='lucid'] .intake-planning-context { padding-block: 4px; margin-bottom: 12px; }
+.intake-questionnaire[data-variant='lucid'] .intake-area-field { margin-top: 16px; }
+.intake-questionnaire[data-variant='lucid'] .intake-action-row { margin-top: 16px; }
+.intake-questionnaire[data-variant='lucid'] .intake-input-meta { font-size: 12px; }
+.intake-questionnaire[data-variant='lucid'] #intake-brief { min-height: 120px; }
+.intake-questionnaire .intake-area-disclosure { margin-top: 8px; border-block: 1px solid var(--i-line); }
+.intake-questionnaire .intake-area-disclosure > summary { display: flex; align-items: center; gap: 12px; justify-content: space-between; min-height: 44px; color: var(--i-ink); font-size: 13px; }
+.intake-questionnaire .intake-area-disclosure > summary > span { flex-shrink: 0; color: var(--i-accent); font-size: 12px; text-decoration: underline; text-underline-offset: 4px; }
+.intake-questionnaire .intake-area-disclosure[open] { padding-bottom: 16px; }
+.intake-questionnaire .intake-area-disclosure[open] > summary { margin-bottom: 0; }
+@media (max-width: 600px) {
+  .intake-questionnaire .questionnaire-progress nav { gap: 3px; }
+  .intake-questionnaire .questionnaire-progress nav button { gap: 4px; font-size: 12px; min-width: 0; }
+  .intake-questionnaire .questionnaire-progress nav button span { width: 18px; height: 18px; flex-shrink: 0; font-size: 10px; }
+  .intake-questionnaire .questionnaire-progress .intake-save-state { display: block; margin: 2px 0 0; font-size: 11px; }
+  .intake-questionnaire .questionnaire-progress > div { align-items: start; }
+  .intake-questionnaire .questionnaire-review-heading { align-items: start; }
+  .intake-questionnaire .questionnaire-sheet h2, .intake-questionnaire .intake-conversation .intake-question h3 { font-size: 21px; }
+  .intake-questionnaire .questionnaire-review-heading > span { margin-top: 5px; }
+  .intake-questionnaire .questionnaire-sheet .intake-item h3 { font-size: 19px; }
+  .intake-questionnaire .questionnaire-actions > .intake-button--primary { width: 100%; margin-left: 0; }
+  .intake-questionnaire .questionnaire-summary li { gap: 10px; }
+}

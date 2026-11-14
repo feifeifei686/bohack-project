@@ -28,3 +28,13 @@ mingma-lab/review/*
 *.key
 __pycache__/
 *.pyc
+
+# Local generated reports, screenshots and authoring scratch data
+/output/
+/outputs/
+/tmp/
+
+# Machine-specific production operations (keep local; do not publish server inventory)
+/deploy/pj1/
+/docs/us-deployment.md
+/docs/us-deployment-verification.json

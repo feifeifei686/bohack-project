@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-14",
+  "product": "安居有数",
+  "slogan": "Dream Defined. Living Refined.",
+  "checks": {
+    "frontendTests": 73,
+    "frontendTypeScript": [
+      "lucid",
+      "atmosphere",
+      "atelier"
+    ],
+    "frontendBuild": "passed",
+    "gatewayAndLifecycleTests": 6,
+    "desktopViewport": [
+      1440,
+      1000
+    ],
+    "mobileViewport": [
+      390,
+      844
+    ],
+    "browserFlows": [
+      "demo drawing -> build -> kitchen -> intake kitchen context",
+      "image upload -> manual room mark -> build",
+      "early home click at 0.00 seconds -> overhead -> drawing",
+      "keyboard entry -> planning-title focus",
+      "generated model -> home -> enter again preserves model and restores input",
+      "keyboard re-entry into an existing generated model restores planning-title focus"
+    ],
+    "crossfade": {
+      "samples": 14,
+      "minimumCombinedOpacity": 0.9999996,
+      "finalPageInteractive": true,
+      "finalHorizontalOverflow": false
+    },
+    "review": "bounded independent source and screenshot review passed",
+    "apiTests": 52,
+    "engineering": [
+      "six layer selections update details",
+      "isolated water and ceiling geometry visible",
+      "collapse and re-expand preserve whole house",
+      "range Home/End, rotation and zoom controls work",
+      "legacy room and route view remains reachable",
+      "desktop1440/mobile390 render without horizontal overflow",
+      "WebGL-unavailable fallback retains readable layer descriptions and disables model-only controls"
+    ],
+    "fallback": "WebGL-unavailable home→planning and engineering details passed",
+    "deliveryPackaging": "static and source ZIP generated successfully"
+  },
+  "limitations": [
+    "The house and five-zone demo have different interior layouts; the handoff aligns their outer footprints and crossfades, not a geometrically identical plan conversion.",
+    "No live model-provider request was made for these visual changes.",
+    "Postman CLI on this device does not support the status command.",
+    "Reduced-motion branches were source-reviewed; browser emulation was unavailable in this run."
+  ],
+  "assets": {
+    "background": "mingma-lab/public/assets/home/luminous-atmosphere.webp",
+    "prompt": "mingma-lab/public/assets/home/luminous-atmosphere.prompt.txt",
+    "tool": "built-in image_gen"
+  },
+  "deployment": {
+    "command": "node scripts/local-deploy.mjs update",
+    "url": "http://10.223.61.95:5188/",
+    "verification": "Both managed services running; LAN HTTP 200; reloaded browser confirms current shared workspace shell and no horizontal overflow."
+  },
+  "homeAnimation": {
+    "buildSeconds": 7,
+    "wallsCompleteSeconds": 1.58,
+    "furnitureCompleteSeconds": 6.2,
+    "detailsCompleteSeconds": 6.8,
+    "routesCompleteSeconds": 6.95,
+    "cameraYawSweepDegrees": 51.57,
+    "cameraPitchChangeDegrees": 18.33,
+    "rhythm": "fast shell then slower staggered furnishings, cubic ease-out camera",
+    "desktopBrowserCompleteState": "7.00"
+  }
+}

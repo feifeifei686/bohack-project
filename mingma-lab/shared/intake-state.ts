@@ -62,8 +62,8 @@ export function validItem(v: unknown): v is IntakeItem {
     Array.isArray(v.standards) && v.standards.length <= 30 && v.standards.every(x => record(x) && str(x.metric) && inEnum(x.kind, ['quantity', 'scope', 'functional', 'measurement', 'professional']) && (x.value === null || str(x.value)) && (x.unit === null || str(x.unit)) && inEnum(x.status, ['user_stated', 'to_measure', 'to_confirm', 'proposal_required']) && str(x.verification) && evidence(x.evidence)) &&
     Array.isArray(v.pending) && v.pending.length <= 40 && v.pending.every(x => record(x) && str(x.question) && inEnum(x.owner, Object.keys(ownerLabels)) && inEnum(x.kind, ['scope', 'necessity', 'decision', 'measurement', 'detail']) && typeof x.blocking === 'boolean')
 }
-export function validResult(v: unknown): v is IntakeResult {
-  return record(v) && str(v.summary) && Array.isArray(v.items) && v.items.length <= 30 && v.items.every(validItem) && unique(v.items.map(x => x.id)).length === v.items.length &&
+export function validResult(v: unknown, maxItems = 30): v is IntakeResult {
+  return record(v) && str(v.summary) && Array.isArray(v.items) && v.items.length <= maxItems && v.items.every(validItem) && unique(v.items.map(x => x.id)).length === v.items.length &&
     Array.isArray(v.questions) && v.questions.length <= 2 && v.questions.every(x => record(x) && safeId(x.id) && (x.targetId === null || safeId(x.targetId)) && str(x.dimension) && str(x.text) && str(x.reason) && strings(x.options, 8) && typeof x.allowMultiple === 'boolean' && inEnum(x.priority, ['scope', 'intent', 'global', 'dependency', 'shared', 'detail'])) &&
     Array.isArray(v.conflicts) && v.conflicts.length <= 30 && v.conflicts.every(x => record(x) && safeId(x.id) && strings(x.itemIds, 30) && str(x.message)) &&
     typeof v.readyForDraft === 'boolean' && str(v.stopReason) && strings(v.warnings, 100)

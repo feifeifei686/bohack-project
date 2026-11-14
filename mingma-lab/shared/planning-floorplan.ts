@@ -1,7 +1,8 @@
+import { renderRecognizedFloorplan, type PlanFurniture, type PlanSegment } from './planning-recognized'
 type Point = [number, number]
 export type Bounds = [x: number, z: number, width: number, depth: number]
 
-export type PlanningRoom = { id: string; name: string; bounds: Bounds; label: Point; material: string }
+export type PlanningRoom = { id: string; name: string; bounds: Bounds; label: Point; material: string; polygon?: Point[]; confidence?: number; previousNames?: string[] }
 
 export const planningRooms: PlanningRoom[] = [
   { id: 'living', name: '客厅', bounds: [0, 4.15, 7.4, 3.25], label: [4.55, 5.95], material: 'wood' },
@@ -130,7 +131,7 @@ const demoWindows: { bounds: Bounds; owner: string }[] = [
   { bounds: [7.36, -.12, 1.44, .13], owner: 'kitchen' },
 ]
 
-export type PlanningModel = { rooms: PlanningRoom[]; drawing?: string; drawingAspect?: number }
+export type PlanningModel = { rooms: PlanningRoom[]; drawing?: string; drawingAspect?: number; recognized?: boolean; imageBounds?: Bounds; walls?: PlanSegment[]; openings?: (PlanSegment & { kind: 'door' | 'window' })[]; furniture?: PlanFurniture[]; warnings?: string[]; analysisState?: 'idle' | 'pending' | 'ready' | 'error'; analysisError?: string }
 export const demoPlanningModel: PlanningModel = { rooms: planningRooms }
 
 function wallsFor(model: PlanningModel): Wall[] {
@@ -145,6 +146,15 @@ function wallsFor(model: PlanningModel): Wall[] {
       { bounds: [x + (w + opening) / 2, z + d - .07, (w - opening) / 2, .07], height: .22, owner: id, front: true },
     ] satisfies Wall[]
   })
+}
+
+export function planningWallSegments(model: PlanningModel): PlanSegment[] {
+  if (model.recognized) return model.walls || []
+  return wallsFor(model).map(({ owner, bounds: [x, z, w, d] }) => ({
+    roomId: owner,
+    start: w >= d ? [x, z + d / 2] : [x + w / 2, z],
+    end: w >= d ? [x + w, z + d / 2] : [x + w / 2, z + d],
+  }))
 }
 
 function renderWalls(walls: Wall[]) {
@@ -178,6 +188,7 @@ function drawRoom(room: PlanningRoom, preview: boolean, walls: Wall[], demo: boo
 }
 
 export function renderPlanningFloorplan(preview = false, model = demoPlanningModel) {
+  if (model.recognized && model.rooms.length) return renderRecognizedFloorplan(model, preview)
   const shadow = preview ? 'planning-preview-shadow' : 'planning-shadow'
   const base: Bounds = [-0.20, -0.20, 10.40, 7.80]
   const corridor: Bounds = [0, 3, 6.8, 1.15]
@@ -195,19 +206,21 @@ export function renderPlanningFloorplan(preview = false, model = demoPlanningMod
 }
 
 export function drawingBounds(model: PlanningModel): Bounds {
+  if (model.imageBounds) return model.imageBounds
   const ratio = model.drawingAspect || 10 / 7.4
   const width = Math.min(10, 7.4 * ratio)
   const depth = width / ratio
   return [(10 - width) / 2, (7.4 - depth) / 2, width, depth]
 }
 
-export function demoDrawingSvg() {
-  const rooms = planningRooms.map(({ bounds: [x, z, w, d], name }) =>
-    `<rect x="${x}" y="${z}" width="${w}" height="${d}" fill="#e7f0f2" stroke="#97b6bc" stroke-width=".025"/>
+export function demoDrawingSvg(warm = false) {
+  const roomFills: Record<string, string> = { bedroom: '#ede8dc', bathroom: '#e6ebe1', kitchen: '#e2e8db', living: '#e8ebdb', entry: '#eee6d3' }
+  const rooms = planningRooms.map(({ id, bounds: [x, z, w, d], name }) =>
+    `<rect x="${x}" y="${z}" width="${w}" height="${d}" fill="${warm ? roomFills[id] : '#e7f0f2'}" stroke="${warm ? '#adb4a4' : '#97b6bc'}" stroke-width=".025"/>
     <text x="${x + w / 2}" y="${z + d / 2}" text-anchor="middle" dominant-baseline="middle">${name}</text>`).join('')
   const walls = demoWalls.map(({ bounds: [x, z, w, d] }) => `<rect x="${x}" y="${z}" width="${w}" height="${d}" fill="#1c4953"/>`).join('')
   const windows = demoWindows.map(({ bounds: [x, z, w] }) => `<path d="M${x} ${z}h${w}m-${w} .12h${w}" stroke="#5bb0bf" stroke-width=".055"/>`).join('')
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-.65 -.85 11.3 9.05" role="img" aria-label="五区演示户型平面图">
+  const sheet = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-.65 -.85 11.3 9.05" role="img" aria-label="五区演示户型平面图">
     <defs><pattern id="drawing-grid" width=".25" height=".25" patternUnits="userSpaceOnUse"><path d="M.25 0H0V.25" fill="none" stroke="#bbd4d9" stroke-width=".013"/></pattern></defs>
     <rect x="-1" y="-1" width="12" height="10" fill="#f6fbfc"/>
     <rect x="-1" y="-1" width="12" height="10" fill="url(#drawing-grid)"/>
@@ -221,4 +234,5 @@ export function demoDrawingSvg() {
       <text x="5" y="-.51" text-anchor="middle" font-size=".19">示意尺寸 · 比例未校准</text>
     </g>
   </svg>`
+  return warm ? sheet.replaceAll('#1c4953', '#374b3e').replaceAll('#5bb0bf', '#9aa48f').replaceAll('#bbd4d9', '#ddd6c6').replaceAll('#f6fbfc', '#faf7ee').replaceAll('#214b53', '#4d6052').replaceAll('#326b76', '#8c9b85').replaceAll('#618c96', '#94a38d').replace('示意尺寸 · 比例未校准', '').replace('font-size=".29"', 'font-size=".52"').replaceAll('font-size=".22"', 'font-size=".36"').replace('width=".25" height=".25"', 'width=".5" height=".5"').replace('M.25 0H0V.25', 'M.5 0H0V.5') : sheet
 }

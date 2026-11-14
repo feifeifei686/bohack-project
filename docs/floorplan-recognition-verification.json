@@ -1,0 +1,124 @@
+{
+  "date": "2026-11-14",
+  "scope": "普通户型图片识别、可校对立体概念模型与原有动画衔接",
+  "automated": {
+    "frontend": {
+      "passed": 91,
+      "failed": 0
+    },
+    "api": {
+      "passed": 55,
+      "failed": 0
+    },
+    "deployment": {
+      "passed": 6,
+      "failed": 0
+    },
+    "postmanAssertions": {
+      "passed": 4,
+      "failed": 0
+    },
+    "dependencySimulation": {
+      "passed": 8,
+      "failed": 0,
+      "cases": [
+        "success",
+        "401",
+        "429",
+        "500",
+        "bad-json",
+        "bad-schema",
+        "truncated",
+        "timeout"
+      ]
+    },
+    "typecheckAndBuild": "passed",
+    "diffWhitespace": "passed",
+    "designDetector": []
+  },
+  "liveVision": {
+    "provider": "DeepSeek Flash",
+    "samples": [
+      {
+        "input": "用户彩色户型截图",
+        "regions": 11,
+        "furniture": 20
+      },
+      {
+        "input": "用户原始结构图",
+        "regions": 10,
+        "furniture": 0
+      },
+      {
+        "input": "用户调整后家具布置图",
+        "regions": 10,
+        "furniture": 19
+      }
+    ],
+    "note": "数量为候选结果，未进行逐像素几何精度评估。一次第三张图浏览器重跑返回24件家具，结果具有模型波动。"
+  },
+  "browser": {
+    "workflowAssertionsPassed": 9,
+    "checks": [
+      "上传后真实API识别",
+      "图纸倾斜与几何升起",
+      "房间切换及25px抬升",
+      "浮动房间标签置于模型上层",
+      "改名后保留房间ID",
+      "家具旋转保存",
+      "重播时原图连续衔接且控件暂时锁定",
+      "自定义房间进入问卷",
+      "家具随沙盘转入问卷",
+      "识别失败保留原图并可重试",
+      "取消重识别保留原模型且晚到响应不覆盖",
+      "390px手机页面无横向溢出"
+    ],
+    "finalLan": {
+      "url": "http://10.223.61.95:5188/#planning",
+      "pageHttp": 200,
+      "regions": 10,
+      "furniture": 19,
+      "labelLiftPx": -24.9994,
+      "mobileViewport": 390,
+      "mobileDocumentWidth": 390,
+      "consoleErrors": 0
+    },
+    "screenshots": [
+      ".local-run/floorplan/final-model.png",
+      ".local-run/floorplan/final-mobile.png"
+    ]
+  },
+  "deployment": "node scripts/local-deploy.mjs update 与 status 已执行，本机和局域网同一部署",
+  "limits": [
+    "概念模型，房间边界、家具位置及门窗需要用户校对",
+    "无真实尺寸/墙高/承重判断",
+    "图上没有家具时不自动布置",
+    "可调整房间包围范围，尚无逐点轮廓或门窗编辑",
+    "本轮页面内存保存，刷新清空",
+    "首页住宅与工程分层仍为原演示模型"
+  ],
+  "reproduce": {
+    "simulation": "postman simulation run postman/simulations/deepseek/deepseek.sim.yaml --port 5210 --no-history",
+    "failureChecks": "node mingma-api/scripts/floorplan-simulation-check.ts",
+    "browserScript": "mingma-lab/scripts/browser-floorplan-recognition.js（依赖模拟，上传并生成模型后运行）"
+  },
+  "prePushRegression": {
+    "date": "2026-11-14",
+    "frontendPassed": 92,
+    "apiPassed": 55,
+    "gatewayAndLifecyclePassed": 6,
+    "mvpPassed": 14,
+    "allFourBuilds": "passed",
+    "previewPackaging": "passed",
+    "browserRegression": [
+      "pending image drag does not throw",
+      "replacement image survives older result during slow decode",
+      "new image analysis completes without browser errors"
+    ],
+    "fixes": [
+      "Disable annotation handlers until coordinate fields exist",
+      "Cancel old analysis before decoding a replacement image",
+      "Retain alias-based references on room rename without mutating requirement snapshots"
+    ]
+  }
+}

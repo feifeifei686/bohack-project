@@ -48,6 +48,9 @@ jobs:
       - name: Check local static gateway
         if: matrix.project == 'mingma-api'
         run: node --test ../scripts/*.test.mjs
+      - name: Check repository documentation links
+        if: matrix.project == 'mingma-lab'
+        run: node ../scripts/check-repository.mjs
       - name: Package design lab preview
         if: matrix.project == 'mingma-lab'
         run: python3 scripts/package-delivery.py

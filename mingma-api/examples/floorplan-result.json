@@ -1,0 +1,116 @@
+{
+  "rooms": [
+    {
+      "id": "living",
+      "name": "客厅",
+      "kind": "living",
+      "polygon": [
+        [
+          100,
+          100
+        ],
+        [
+          600,
+          100
+        ],
+        [
+          600,
+          400
+        ],
+        [
+          400,
+          400
+        ],
+        [
+          400,
+          800
+        ],
+        [
+          100,
+          800
+        ]
+      ],
+      "confidence": 0.9
+    },
+    {
+      "id": "bedroom",
+      "name": "卧室",
+      "kind": "bedroom",
+      "polygon": [
+        [
+          600,
+          100
+        ],
+        [
+          900,
+          100
+        ],
+        [
+          900,
+          800
+        ],
+        [
+          600,
+          800
+        ]
+      ],
+      "confidence": 0.85
+    }
+  ],
+  "walls": [
+    {
+      "roomId": "living",
+      "start": [
+        100,
+        100
+      ],
+      "end": [
+        600,
+        100
+      ]
+    },
+    {
+      "roomId": "bedroom",
+      "start": [
+        900,
+        100
+      ],
+      "end": [
+        900,
+        800
+      ]
+    }
+  ],
+  "openings": [
+    {
+      "roomId": "living",
+      "kind": "window",
+      "start": [
+        200,
+        100
+      ],
+      "end": [
+        400,
+        100
+      ]
+    }
+  ],
+  "furniture": [
+    {
+      "id": "bed1",
+      "roomId": "bedroom",
+      "kind": "bed",
+      "bounds": [
+        650,
+        300,
+        200,
+        300
+      ],
+      "rotation": 90,
+      "confidence": 0.9
+    }
+  ],
+  "warnings": [
+    "合成测试图形，不代表模型识别准确率。"
+  ]
+}

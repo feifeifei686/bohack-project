@@ -124,10 +124,10 @@
   50% { filter: brightness(1.18) drop-shadow(0 5px 12px #70cbd47f); }
 }
 .intake-space .planning-room { transition: transform 720ms cubic-bezier(.25,.72,.3,1), filter 720ms ease; }
-.intake-space .planning-floorplan :is([data-model-box] > polygon, [data-model-detail]:not([filter])) {
+.intake-space .planning-floorplan :is([data-model-box] > polygon, [data-model-prism] > polygon, [data-model-detail]:not([filter])) {
   transition: fill 720ms ease, fill-opacity 720ms ease, stroke 720ms ease, stroke-opacity 720ms ease;
 }
-.intake-space.is-glass .planning-floorplan :is([data-model-box] > polygon, [data-model-detail]:not([filter])) {
+.intake-space.is-glass .planning-floorplan :is([data-model-box] > polygon, [data-model-prism] > polygon, [data-model-detail]:not([filter])) {
   fill: #a8dbe6;
   fill-opacity: .24;
   stroke: #4f8295;
@@ -138,7 +138,7 @@
 .intake-space.is-glass :is(.planning-room-label, .planning-hotspot) { opacity: 0; }
 .intake-space.is-glass .planning-room.is-focused .planning-tint { fill: #79d7d5; fill-opacity: .38; }
 .intake-space.is-glass .planning-room.is-focused .planning-outline { stroke: #257682; stroke-width: 3.5; }
-.intake-space.is-glass .planning-floorplan .is-feature-focus :is([data-model-box] > polygon, [data-model-detail]),
+.intake-space.is-glass .planning-floorplan .is-feature-focus :is([data-model-box] > polygon, [data-model-prism] > polygon, [data-model-detail]),
 .intake-space.is-glass .planning-floorplan .is-feature-focus > polygon {
   fill: #a4f3e8;
   fill-opacity: .68;

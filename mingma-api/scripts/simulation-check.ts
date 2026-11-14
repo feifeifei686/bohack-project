@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ErrorResponse, successSchema, type Operation } from '../src/schemas.ts'
+import { RequirementInsightSuccess } from '../src/requirement-insight.ts'
 import type { IntakeRequest, IntakeResponse, IntakeItem } from '../../mingma-lab/shared/intake-contract.ts'
 
 const apiRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -245,6 +246,30 @@ try {
   assert.equal(afterBadInput.requests, beforeBadInput.requests)
   assert.equal(afterBadInput.requests, expectedUpstreamCalls, 'Each valid intake request makes one provider call; invalid history makes none')
   assert(afterBadInput.operations.intake > 0)
+  const insightInput = { requirementVersion: 1, requirements: [requirement, { ...requirement, id: 'K03', title: '保留布局', description: '尽量保留水槽位置。', priority: 'prefer' }] }
+  await scenario('success')
+  const insight = await call('/api/ai/requirement-insight', insightInput)
+  expectedUpstreamCalls++
+  assert.equal(insight.response.status, 200)
+  const insightResult = RequirementInsightSuccess.parse(insight.data)
+  assert.equal(insightResult.meta.model, 'deepseek-flash')
+  assert.equal(insightResult.data.metrics.total, 2)
+  assert.equal(insightResult.data.metrics.must, 1)
+  assert.equal(insightResult.data.metrics.clarityPercent, 50)
+  assert(insightResult.data.findings.every(item => item.checks.includes(requirement.pending[0]!)))
+  checks.push({ name: 'insight-derived-metrics-and-preserved-pending', status: insight.response.status })
+  for (const [name, status, code] of [['forged-evidence', 502, 'AI_INVALID_OUTPUT'], ['duplicate-finding', 502, 'AI_INVALID_OUTPUT'], ['500', 503, 'AI_UPSTREAM_UNAVAILABLE'], ['timeout', 504, 'AI_TIMEOUT']] as const) {
+    await scenario(name)
+    const failure = await call('/api/ai/requirement-insight', insightInput)
+    expectedUpstreamCalls++
+    assert.equal(failure.response.status, status)
+    assert.equal(failure.data.error.code, code)
+    assert.equal('data' in failure.data, false)
+    checks.push({ name: `insight-${name}`, status, code })
+  }
+  const insightStats = await (await fetch(`${simUrl}/__stats`)).json() as typeof statsBefore
+  assert.equal(insightStats.requests, expectedUpstreamCalls)
+  assert.equal(insightStats.operations['requirement-insight'], 5)
   if (runCollection) {
     await scenario('success')
     const result = spawnSync('postman', [
@@ -266,7 +291,7 @@ try {
   const events = logs.simulation.split('\n').flatMap(line => { try { return [JSON.parse(line)] } catch { return [] } })
   const calls = events.filter(event => event.event === 'request' && JSON.stringify(event).includes('chat/completions'))
   assert(calls.length >= 4, 'Simulation logs must prove that the real caller reached the dependency')
-  const report = { environment: 'local Postman simulation, no real provider calls', cli: postman.stdout.trim(), checks, legacyChecks: 19, legacyUpstreamRequests: statsAfter.requests, intakeChecks: checks.length - 19, upstreamRequests: expectedUpstreamCalls, totalUpstreamRequests: finalStats.requests, collection, requestEvents: calls.length, limitations: ['Synthetic model content checks integration handling, not actual model accuracy or universal prompt-injection resistance.', 'User credentials are not loaded; real DeepSeek authorization and quality need separate live verification.'] }
+  const report = { environment: 'local Postman simulation, no real provider calls', cli: postman.stdout.trim(), checks, legacyChecks: 19, legacyUpstreamRequests: statsAfter.requests, intakeChecks: checks.length - 24, insightChecks: 5, upstreamRequests: expectedUpstreamCalls, totalUpstreamRequests: finalStats.requests, collection, requestEvents: calls.length, limitations: ['Synthetic model content checks integration handling, not actual model accuracy or universal prompt-injection resistance.', 'User credentials are not loaded; real DeepSeek authorization and quality need separate live verification.'] }
   await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2) + '\n')
   console.log(JSON.stringify({ passed: checks.length, upstreamRequests: expectedUpstreamCalls, totalUpstreamRequests: finalStats.requests, collection, requestEvents: calls.length, evidenceDirectory: output }, null, 2))
 } finally {

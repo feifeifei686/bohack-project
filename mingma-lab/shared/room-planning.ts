@@ -1,6 +1,9 @@
+import { createWallDemolition } from './wall-demolition'
+import { planningRoomMatches } from './planning-room-links'
 import { bindPlanSource, renderPlanningSource } from './planning-source'
 import { animatePlanningBuild, capturePlanningDrawing } from './planning-build-animation'
 import { demoPlanningModel, renderPlanningFloorplan } from './planning-floorplan'
+import { decodeRoomPlanningSnapshot, type RoomPlanningSnapshot } from './planning-snapshot'
 import './room-planning.css'
 
 type RoomNeed = { id: string; title: string; description: string }
@@ -34,35 +37,40 @@ const examples: Record<string, RoomNeed[]> = {
 const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)
 const arrow = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg>'
 
-export function createRoomPlanning() {
+export function createRoomPlanning({ editorial = false, persistent = false, onChange }: { editorial?: boolean; persistent?: boolean; onChange?: () => void } = {}) {
+  const listeners = new Set<() => void>(onChange ? [onChange] : [])
+  const notify = () => { for (const listener of listeners) listener() }
   let selectedRoomId = 'bathroom'
   let activeHotspot: string | null = null
   let seen = false
-  let model = demoPlanningModel
-  let stage: 'drawing' | 'building' | 'model' = 'drawing'
+  let model = structuredClone(demoPlanningModel)
+  const wallView = createWallDemolition({ onChange: notify, persistent })
+  let disposeWalls: (() => void) | undefined
+  let stage: 'drawing' | 'building' | 'model' | 'walls' = 'drawing'
+  let cancelAnalysis: (() => void) | undefined
   let cancelBuild: (() => void) | undefined
   const selectedRoom = () => model.rooms.find(room => room.id === selectedRoomId) || model.rooms[0]
 
 
   function render() {
-    return `<section class="room-planning" id="room-planning" aria-labelledby="planning-title">
+    if (stage === 'walls') return `<section class="room-planning" id="room-planning" data-stage="walls" aria-label="户型墙体拆除">${wallView.render(model)}</section>`
+    return `<section class="room-planning" id="room-planning" data-stage="${stage}" aria-labelledby="planning-title">
       <header class="planning-header">
         <a class="planning-back" href="#overview">${arrow} 返回项目概览</a>
-        <h1 id="planning-title">从图纸，到你的空间。</h1>
-        <p>从平面图生成户型，选择房间开始规划。</p>
+        ${editorial && stage === 'drawing' ? '' : '<h1 id="planning-title">从图纸，到你的空间。</h1><p>从平面图生成户型，选择房间开始规划。</p>'}
       </header>
-      <div data-drawing-slot ${stage !== 'drawing' ? 'hidden' : ''}>${renderPlanningSource(model)}</div>
+      <div data-drawing-slot ${stage !== 'drawing' ? 'hidden' : ''}>${renderPlanningSource(model, editorial, stage === 'drawing')}</div>
       <div class="planning-layout" ${stage === 'drawing' ? 'hidden' : ''}>
         <div class="planning-model">
           <div class="planning-stage${seen ? '' : ' planning-stage--enter'}">
-            <span class="planning-source">${model.drawing ? '标注户型' : '演示户型'}</span>
+            <span class="planning-source">${model.recognized ? 'AI 识别 · 待核对' : model.drawing ? '标注户型' : '演示户型'}</span>
             ${renderPlanningFloorplan(false, model)}
           </div>
           <div class="planning-model-footer">
             <div class="planning-room-picker" aria-label="选择房间">
               ${model.rooms.map(room => `<button type="button" data-planning-room="${room.id}" aria-pressed="${room.id === selectedRoomId}">${escape(room.name)}</button>`).join('')}
             </div>
-            <p>布局与比例仅供定位。 <button type="button" class="planning-text" data-plan-step="drawing">查看原图 / 重播</button></p>
+            <button type="button" class="planning-wall-entry" data-plan-step="walls">墙体拆除 · 整体与分部展开</button><p>布局与比例仅供定位。 <button type="button" class="planning-text" data-plan-step="drawing">查看原图 / 重播</button></p>
           </div>
         </div>
         <aside class="planning-sidebar" aria-labelledby="planning-room-title">
@@ -81,6 +89,8 @@ export function createRoomPlanning() {
     const layout = root.querySelector<HTMLElement>('.planning-layout')!
     const canvas = root.querySelector<HTMLElement>('.planning-stage')!
     function refresh(focus?: string) {
+      cancelAnalysis?.()
+      disposeWalls?.()
       const template = document.createElement('template')
       template.innerHTML = render()
       const next = template.content.firstElementChild as HTMLElement
@@ -88,12 +98,18 @@ export function createRoomPlanning() {
       mount(next, requirements)
       if (focus) next.querySelector<HTMLElement>(focus)?.focus({ preventScroll: true })
     }
+    if (stage === 'walls') {
+      disposeWalls = wallView.mount(root.querySelector<HTMLElement>('.wall-explorer')!, () => { stage = 'model'; refresh('[data-plan-step="walls"]'); notify() })
+      return
+    }
     const addRoom = bindPlanSource(slot, model, next => {
-      if (model.drawing) URL.revokeObjectURL(model.drawing)
+      if (model.drawing && model.drawing !== next.drawing) URL.revokeObjectURL(model.drawing)
       model = next
       activeHotspot = null
       refresh('[data-mark-name]')
+      notify()
     })
+    cancelAnalysis = addRoom.cancel
     const details = root.querySelector('#planning-room-details')!
     const groups = [...root.querySelectorAll<SVGGElement>('[data-floor-room]')]
     const layer = root.querySelector('.planning-room-layer')!
@@ -124,7 +140,7 @@ export function createRoomPlanning() {
       const room = selectedRoom()
       if (!room || stage === 'drawing') return
       selectedRoomId = room.id
-      const actual = requirements.filter(req => req.intake ? req.intake.areas.includes(room.name) : req.room === room.name)
+      const actual = requirements.filter(req => planningRoomMatches(room, req.intake ? req.intake.areas : [req.room]))
       const sample = model.drawing ? [] : examples[room.id]
       const entries = actual.length ? actual : sample
       details.innerHTML = `<div class="planning-room-heading">
@@ -135,6 +151,7 @@ export function createRoomPlanning() {
         <ul class="planning-needs">${!entries.length ? '<li>还没有记录这个区域的硬装需求。</li>' : ''}${entries.map(entry => `<li data-planning-need="${escape(entry.id)}"><b>${escape(entry.title)}</b><p>${escape(entry.description)}</p></li>`).join('')}</ul>
         ${actual.length && activeHotspot ? `<div class="planning-example-focus" data-planning-need="${activeHotspot}"><small>构件示例</small><b>${sample.find(entry => entry.id === activeHotspot)?.title || ''}</b></div>` : ''}`
       for (const group of groups) group.classList.toggle('is-selected', group.dataset.floorRoom === room.id)
+      for (const label of root.querySelectorAll<SVGGElement>('[data-floor-label]')) label.classList.toggle('is-selected', label.dataset.floorLabel === room.id)
       const currentGroup = groups.find(group => group.dataset.floorRoom === room.id)!
       if (stage === 'building') {
         layer.append(currentGroup)
@@ -154,13 +171,26 @@ export function createRoomPlanning() {
     root.addEventListener('click', event => {
       const target = event.target as Element
       const step = target.closest<HTMLElement>('[data-plan-step]')?.dataset.planStep
-      if (step === 'drawing') { stage = 'drawing'; refresh('[data-plan-step="build"]'); return }
+      if (step === 'walls' && stage === 'model') { stage = 'walls'; refresh('[data-wall-heading]'); notify(); return }
+      if (step === 'drawing') { stage = 'drawing'; refresh('[data-plan-step="build"]'); notify(); return }
       if (step === 'demo') { reset(); refresh('[data-plan-step="build"]'); return }
-      if (step === 'undo') { model.rooms.pop(); refresh('[data-mark-name]'); return }
-      if (step === 'mark') { if (addRoom()) refresh('[data-mark-name]'); return }
-      if (step === 'build' && stage === 'drawing' && model.rooms.length) {
+      if (step === 'undo') { model.rooms.pop(); wallView.reset(); refresh('[data-mark-name]'); notify(); return }
+      if (step === 'mark') { if (addRoom()) { wallView.reset(); refresh('[data-mark-name]'); notify() } return }
+      if (step === 'build' && stage === 'drawing' && model.rooms.length && model.analysisState !== 'pending') {
         const drawing = capturePlanningDrawing(slot.querySelector<HTMLElement>('.planning-paper')!, model)
         stage = 'building'
+        notify()
+        root.dataset.stage = stage
+        if (editorial) {
+          const title = root.querySelector('#planning-title')
+          if (title) {
+            title.removeAttribute('id')
+            const heading = document.createElement('h1')
+            heading.id = 'planning-title'
+            heading.textContent = '从图纸，到你的空间。'
+            root.querySelector('.planning-header')!.append(heading)
+          }
+        }
         slot.hidden = true
         layout.hidden = false
         layout.inert = true
@@ -176,6 +206,8 @@ export function createRoomPlanning() {
           },
           () => {
             stage = 'model'
+            notify()
+            root.dataset.stage = stage
             layout.inert = false
             root.classList.remove('is-building')
             for (const property of ['--build-backdrop', '--build-lift', '--build-controls']) root.style.removeProperty(property)
@@ -196,6 +228,7 @@ export function createRoomPlanning() {
       if (hotspot) activeHotspot = hotspot.dataset.floorHotspot || null
       if (feature) activeHotspot = feature.dataset.floorFeature || null
       update()
+      notify()
     })
     root.addEventListener('keydown', event => {
       const target = event.target as Element
@@ -209,15 +242,42 @@ export function createRoomPlanning() {
 
   function reset() {
     cancelBuild?.()
+    disposeWalls?.()
+    cancelAnalysis?.()
+    if (model.analysisState === 'pending') model.analysisState = 'idle'
     if (model.drawing) URL.revokeObjectURL(model.drawing)
-    model = demoPlanningModel
+    wallView.reset()
+    model = structuredClone(demoPlanningModel)
     stage = 'drawing'
     selectedRoomId = 'bathroom'
     activeHotspot = null
     seen = false
+    notify()
   }
-  return { render, mount, selectedRoom, reset, model: () => model, leave() {
+
+  function snapshot(): RoomPlanningSnapshot {
+    return { schema: 1, model: structuredClone(model.analysisState === 'pending' ? { ...model, analysisState: 'idle' } : model), selectedRoomId: selectedRoom()?.id || '', stage: stage === 'building' ? 'model' : stage, walls: wallView.snapshot(model) }
+  }
+  function restore(value: unknown) {
+    const saved = decodeRoomPlanningSnapshot(value)
+    cancelBuild?.(); disposeWalls?.(); cancelAnalysis?.()
+    model = saved.model
+    selectedRoomId = saved.selectedRoomId
+    stage = saved.stage
+    activeHotspot = null
+    seen = true
+    wallView.reset()
+    wallView.restore(model, saved.walls)
+  }
+  function subscribe(listener: () => void) {
+    listeners.add(listener)
+    return () => listeners.delete(listener)
+  }
+  return { snapshot, restore, subscribe, render, mount, selectedRoom, reset, wallView, currentStage: () => stage, model: () => model, leave() {
     cancelBuild?.()
+    disposeWalls?.()
+    cancelAnalysis?.()
+    if (model.analysisState === 'pending') model.analysisState = 'idle'
     if (stage === 'building') stage = 'model'
   } }
 }

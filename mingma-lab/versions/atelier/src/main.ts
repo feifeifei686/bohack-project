@@ -285,7 +285,7 @@ function shell(content: string) {
         ><span>筑序<small>ATELIER</small></span></a
       >
       <div class="rail-project">
-        <span>明码 · 家装方案册</span><b>我的第一个家</b><small>示例项目 / 厨房改造</small>
+        <span>安居有数 · 家装方案册</span><b>我的第一个家</b><small>示例项目 / 厨房改造</small>
       </div>
       <nav aria-label="项目章节">
         ${navs.map(([id, text, symbol], index) => html`<a href="#${id}" class="chapter-link ${page === id || (page === 'vendor' && id === 'compare') ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''}><span class="chapter-num">${String(index + 1).padStart(2, '0')}</span><span class="chapter-text">${({ overview: '项目总览', clarify: '生活访谈', requirements: '我的需求', compare: '方案审阅', space: '空间图纸', records: '确认归档' } as Record<string, string>)[id] || text}</span><span class="chapter-symbol">${icon(symbol, 15)}</span></a>`).join('')}
@@ -312,7 +312,7 @@ function shell(content: string) {
         ${storageError ? '<p class="notice warn">本机保存异常，请先导出当前项目留存。</p>' : ''}${content}
       </main>
       <footer class="document-footer">
-        <span>明码 / 筑序</span>
+        <span>安居有数 / 筑序</span>
         <p>需求由你定义，方案依据逐项核对。</p>
         <small>AI 需求共创 · 不涉及价格</small>
       </footer>
@@ -1101,7 +1101,7 @@ document.addEventListener('click', (e) => {
       break
     case 'about':
       showDialog(
-        '关于这版明码',
+        '关于这版安居有数',
         `<p>这是可交互的网页 MVP，支持多区域 AI 需求共创、清单确认与版本发布；商家提交、核对和选择保留演示流程。</p><dl class="about-list"><dt>数据保存</dt><dd>仅保存在当前浏览器，不会同步给真实商家。更换浏览器不会同步数据。</dd><dt>AI 接入</dt><dd>需求共创已接入 AI，可按全局、区域和公共项拆分并追问；商家方案页面仍使用演示规则，不构成专业审查。</dd><dt>空间模型</dt><dd>固定示意户型与路线，不能用作实际施工图。</dd></dl>`,
       )
       break
@@ -1352,7 +1352,7 @@ document.addEventListener('click', (e) => {
     }
     case 'csv-template':
       download(
-        '明码商家方案模板.csv',
+        '安居有数商家方案模板.csv',
         '\uFEFF' +
           proposalCsv(
             latest()!.requirements.map((r) => ({
@@ -1464,7 +1464,7 @@ document.addEventListener('click', (e) => {
     }
     case 'export-scales':
       download(
-        '明码历史维度记录.json',
+        '安居有数历史维度记录.json',
         JSON.stringify(
           {
             archiveOnly: true,
@@ -1483,7 +1483,7 @@ document.addEventListener('click', (e) => {
       break
     case 'export':
       download(
-        '明码项目记录.json',
+        '安居有数项目记录.json',
         JSON.stringify(
           {
             exportedAt: now(),

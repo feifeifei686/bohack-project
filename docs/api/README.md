@@ -6,7 +6,7 @@
 
 ## 调用约定
 
-默认服务地址为 `http://127.0.0.1:5199`。五个 AI 路径均使用 `POST`，请求体为未压缩的 `application/json`，整个请求体最多 128 KiB。字符串长度限制和数组容量以 OpenAPI schema 为准；对象不接受未定义字段。
+默认服务地址为 `http://127.0.0.1:5199`。AI 路径均使用 `POST`，请求体为未压缩的 `application/json`；文字请求体最多 128 KiB，户型图片接口的限制见对应章节。字符串长度限制和数组容量以 OpenAPI schema 为准；对象不接受未定义字段。
 
 默认仅监听回环地址且不设置服务令牌。若配置 `API_ACCESS_TOKEN`，AI POST 必须带 `Authorization: Bearer <服务访问令牌>`；这不是 DeepSeek API Key。绑定非回环地址时强制配置至少 24 字符的服务令牌。浏览器必须来自 `CORS_ORIGINS` 中的明确来源。
 
@@ -49,6 +49,30 @@ AI 成功响应：
 ```
 
 `details` 可省略；具体错误文字以响应为准。调用方应按 HTTP 状态和 `code` 处理，不依赖中文文本匹配。服务不会把提供商原始错误体或密钥返回给调用方。服务和类型客户端单次调用。澄境网页遇到可重试错误时自动退避重试最多两次，可取消；重新调用可能再次产生模型用量。
+
+## 提交后的需求推演
+
+`POST /api/ai/requirement-insight`
+
+输入示例：[requirement-insight.json](../../mingma-api/examples/requirement-insight.json)。类型定义见 [requirement-insight-contract.ts](../../mingma-lab/shared/requirement-insight-contract.ts)，校验与提示词见 [requirement-insight.ts](../../mingma-api/src/requirement-insight.ts)。
+
+调用方传入已提交的 `requirementVersion`、完整 `requirements`（1 至 80 条）和选填的 `projectContext`（与共创背景相同的 `{id,text,confirmed}` 数组）。接口固定调用一次 `deepseek-flash`，不改写或发布需求，不发送商家消息，不返回内部思维过程。输入对象只含标准需求字段；浏览器的 `intake` 等附属数据需在发送前去除。
+
+输出 `data` 包含：
+
+| 字段 | 含义 |
+| --- | --- |
+| `requirementVersion` | 服务端从输入复制的分析基准版本 |
+| `summary` | 对本轮发现的简短总结 |
+| `findings` | 每个需求恰好一条，包含 `clear` / `needs_detail` 表达状态、原因、原文依据和待确认事项；输出按输入顺序归一化 |
+| `connections` | `dependency` 依赖、`synergy` 可协同、`tradeoff` 待权衡；每条关系必须引用两个端点的原文，不允许自连或重复连接同一对需求 |
+| `nextSteps` | 最多 6 条后续建议，每条引用真实需求编号 |
+| `metrics` | 服务端按校验后的输出派生的统计，模型不能提供或覆写 |
+| `warnings` | 分析边界与局限 |
+
+`metrics` 中的 `total` / `must` 来自输入；`clear` / `needsDetail` 来自逐项分析；`clarityPercent = round(clear / total × 100)`；`connections` 是关系数量；`pendingChecks` 是合并原有 `pending` 与新增检查项后的去重文本总数。网页应将清晰占比解释为需求表达状态，不能展示为施工可行性、风险概率、完成进度或模型信心。
+
+引用来源 `sourceId` 为需求编号，`quote` 必须是该条需求 `title`、`description`、`source`、`pending` 按换行连接后文本中的连续原文。逐项判断只能引用本条；关系必须同时引用两端。背景用于辅助理解，不代替对应需求的依据。伪造引用、漏项、重复编号、无效关系或模型自报指标均返回 `502 AI_INVALID_OUTPUT`。分析失败仅影响本轮推演，调用方保留已经提交的需求版本，提供重试与继续操作。
 
 ## 新需求获取流程
 
@@ -231,6 +255,17 @@ AI 成功响应：
 
 当前 UI 的 `Proposal.items` 可按需求编号拼接成文字，例如 `K02：预留洗碗机安装位。`；传入文本必须与后续显示引用的文本一致。AI 接口的 evidence 是数组，不能直接替换旧演示代码中的单个 evidence 字符串而不调整渲染。
 
-本轮页面与接口验收见[新版验证记录](../intake-release-verification.json)。商家页面的本地规则、模拟身份和原有历史版本继续保留；上传户型图生成模型尚未实现。
+本轮页面与接口验收见[新版验证记录](../intake-release-verification.json)。商家页面的本地规则、模拟身份和原有历史版本继续保留；户型图片识别与概念模型已接入，详见下文。
 
 LAN 网关会对未开放的接口返回 `403 LOCAL_ONLY`，对不符合来源要求的请求返回 403；这些请求不会调用模型。访问码校验已移除，正常需求共创请求仍受后端的请求频率和并发限制。
+
+
+## 户型图识别
+
+`POST /api/ai/floorplan` 接受 `{ "image": "data:image/jpeg;base64,..." }`，也支持 PNG / WebP。解码后的图片不得超过 4 MiB，JSON 请求体最多约 6 MiB。前端允许选择 12 MB 以内的图纸并先缩放压缩。复用现有 DeepSeek 密钥，固定使用支持视觉输入的 `deepseek-flash`。
+
+响应 `{ requestId, data: { rooms, walls, openings, furniture, warnings }, meta }`。点坐标为完整原图上的 0–1000 相对坐标；房间为多边形，家具 `bounds` 为 `[左,上,宽,高]`，`rotation` 为朝向角度；均不是真实米制尺寸。`meta.requiresHumanConfirmation` 始终为 true。几何、数量、编号、引用和图片格式经过服务端校验，模型内容不作为 HTML 或指令执行。
+
+`422 FLOORPLAN_NOT_FOUND` 表示未得到户型，`400 INVALID_IMAGE` 表示格式或大小不合法，`502 AI_INVALID_OUTPUT` 表示候选几何无法使用；其他错误继承现有模型接口。单次最多等待 120 秒，无自动重试。服务端不写入原图或图像正文日志。局域网同源可调用本接口，其他原有限本机接口保持原访问规则。
+
+本地可运行集合：`postman/collections/mingma-floorplan.postman_collection.json`，其中图片为一像素契约测试图，仅用于 DeepSeek 依赖模拟，不用于评价实际视觉识别。
