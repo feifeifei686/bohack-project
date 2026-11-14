@@ -1,6 +1,6 @@
 # 当前实现结构
 
-明码包含静态前端、同源网关和独立 AI 服务。`mingma-lab` 使用 Vite、TypeScript 与 Tailwind CSS 构建澄境；`#clarify` 挂载 AI 需求获取模块，调用 `mingma-api` 的 `/api/ai/intake`。方案比对与商家修订界面仍使用本地规则和模拟公司。当前没有数据库或真实商家通信服务。
+安居有数包含静态前端、同源网关和独立 AI 服务。`mingma-lab` 使用 Vite、TypeScript 与 Tailwind CSS 构建澄境，首页与工程预览由 Three.js 渲染；`#clarify` 挂载 AI 需求获取模块，调用 `mingma-api` 的 `/api/ai/intake`。方案比对与商家修订界面仍使用本地规则和模拟公司。当前没有数据库或真实商家通信服务。
 
 ## 工程之间的关系
 
@@ -21,6 +21,7 @@
 | `vite.config.ts` | Tailwind 插件、相对资源路径、澄境与旧链接跳转入口 |
 | `versions/<版本>/src/main.ts` | 页面模板、hash 导航、事件处理、状态与本地存储 |
 | `shared/intake-ui.ts`、`intake-ui.css` | 三版共享的表达、追问、编辑、确认和导出界面 |
+| `shared/room-planning.ts`、`planning-source.ts`、`planning-floorplan.ts` | 图纸预览、手工房间标注与概念户型生成，澄境使用左右分区入口 |
 | `shared/intake-state.ts`、`intake-state.test.ts` | 访谈草稿、建议采纳、确认门槛、冲突与迟到响应保护 |
 | `shared/intake-contract.ts` | 前后端共用的公开类型与背景条目，不包含运行时依赖或密钥 |
 | `shared/requirements-hub.ts`、`requirements-hub.css`、`requirements-hub.test.ts` | 统一需求页的背景迁移、派生待办、只读历史记录及样式 |
@@ -28,7 +29,10 @@
 | `versions/<版本>/src/domain.test.ts` | 该版领域规则测试 |
 | `versions/<版本>/src/dimensions.ts` | 旧维度名称与商家承接引导定义，不再提供独立评分界面 |
 | `versions/<版本>/src/house-data.ts` | 房间、尺寸和水电线路的演示数据 |
-| `versions/<版本>/src/glass-model.ts` 或 `atelier-model.ts` | 当前使用的交互空间投影绘制 |
+| `versions/<版本>/src/glass-model.ts` 或 `atelier-model.ts` | 原房间与线路模式的 SVG 交互投影 |
+| `versions/lucid/src/home-architecture.ts`、`home-builder.ts`、`home-light-routes.ts` | 首页住宅几何、约 7 秒搭建与持续流光，住宅几何也供工程预览复用 |
+| `versions/lucid/src/home-scene.ts`、`home-arrival.ts` | 首页场景生命周期、俯视保留帧到图纸的连续转场及焦点恢复 |
+| `versions/lucid/src/engineering-data.ts`、`engineering-ui.ts`、`engineering-view.ts` | 六层工程说明、交互控制与 Three.js 分层渲染 |
 | `versions/<版本>/src/style.css` 及其导入样式 | 各版布局、视觉和响应式规则 |
 | `public/assets/`、`public/fonts/`、`public/previews/` | 视觉素材、本地字体、实际界面截图 |
 | `scripts/check.mjs` | 分别执行三版 TypeScript 检查 |
@@ -38,7 +42,7 @@
 
 ## 页面与状态
 
-每版有七个有效页面：`#overview`、`#clarify`、`#requirements`、`#compare`、`#vendor`、`#space`、`#records`。`#requirements` 统一显示“我的需求”；旧 `#dimensions` 兼容跳转到该页，独立维度导航与评分表已撤下。页面路由不需要服务器回退；真实 AI 共创需要同源 `/api` 转发。Vite 开发服务默认代理到 5199，本机部署由 `scripts/local-web.mjs` 同时提供构建产物和 API 转发；单独解压静态 ZIP 不包含这项服务。
+每版有八个有效页面：`#overview`、`#planning`、`#clarify`、`#requirements`、`#compare`、`#vendor`、`#space`、`#records`。`#planning` 负责图纸与区域规划，澄境的 `#space` 默认进入工程分层，可切换“房间与线路”。`#requirements` 统一显示“我的需求”；旧 `#dimensions` 兼容跳转到该页，独立维度导航与评分表已撤下。页面路由不需要服务器回退；真实 AI 共创需要同源 `/api` 转发。Vite 开发服务默认代理到 5199，本机部署由 `scripts/local-web.mjs` 同时提供构建产物和 API 转发；单独解压静态 ZIP 不包含这项服务。
 
 ```mermaid
 flowchart TD
@@ -103,13 +107,17 @@ K02,partial,"已预留洗碗机安装位与电源，供水和排水配套待补�
 
 ## 空间表达
 
-当前主工程把三维坐标投影为 SVG，支持旋转、缩放、俯视、房间点选、墙体显示与冷水/热水/电线路径筛选。它适合展示「需求关联哪个空间和点位」，不依赖 WebGL。
+澄境首页使用 Three.js，约 7 秒内依次搭建住宅，镜头水平扫过约 52°。进入规划时标题放大出屏，房屋转为俯视，`home-arrival.ts` 保留渲染帧并移入目标图纸边界后交叠淡出。首页住宅与五区图纸的内部布局不同；该衔接对齐外轮廓，不是同一几何模型的平立面转换。
 
-五个房间、67㎡面积和路线均为演示资料。模型没有自动户型识别、真实工程设计或规范校核。商家空间资料为空时应显示资料缺口，不借用演示线路冒充其方案。
+`#space` 默认复用首页住宅，展示结构与拆改、水电管线、防水与铺装、吊顶与木作、柜体与固装、家具与居住六层。支持合拢、展开程度、选择、单层查看、旋转与缩放；工程示意不读取上传图纸或商家方案。原“房间与线路”模式仍把三维坐标投影为 SVG，支持俯视、房间点选、墙体和线路筛选，不依赖 WebGL。商家资料为空时显示缺口，不借用演示线路。
+
+`#planning` 可上传 PNG、JPG、WebP，手工框选或填写矩形房间范围，再生成概念模型并关联区域共创。图纸和标注只保留在本轮；自动识别、门窗校对与尺寸校准尚未实现。五区演示的面积与路线、工程层的构件和管线均为示意，不构成真实工程设计或规范校核。
+
+首页和工程预览处理减少动态偏好、离屏暂停与退出清理。WebGL 不可用时，首页显示参考图并保留规划入口；工程页保留层级说明，停用依赖模型的控件，仍可切回 SVG 模式。
 
 ## 运行与验证边界
 
-`npm test` 运行三版领域测试与共享 intake 状态测试；`npm run build` 检查 TypeScript 并构建所有 HTML 入口。浏览器与视觉验收单独执行，本轮整合结果见[发布验证](requirements-unification-verification.json)，前一轮需求共创结果见[历史发布验证](intake-release-verification.json)，旧记录见[历史摘要](../mingma-lab/review/verification.json)。源码中保留 Three.js 实验代码，不代表当前主页面依赖 WebGL。
+`npm test` 运行三版领域测试与共享模块测试；`npm run build` 检查三版 TypeScript，构建澄境根入口和旧澄境地址跳转页。浏览器与视觉验收单独执行，本轮见[空间交互验证](ui-transition-verification.json)，包含工程操作、键盘再次进入规划和 WebGL 降级；减少动态效果仅完成源码核查。此前结果见[需求整合验证](requirements-unification-verification.json)、[需求共创验证](intake-release-verification.json)及[历史摘要](../mingma-lab/review/verification.json)。
 
 AI 服务的协议见[接口契约](api/README.md)；Zod schema 同时用于校验与 OpenAPI 生成。主入口在 `mingma-api/src/server.ts`，HTTP 边界在 `app.ts`，提供商适配在 `provider.ts`；新流程定义和约束在 `intake.ts`，原四接口在 `operations.ts`。每次请求携带上下文，不将项目写入数据库。数值必须具有当前用户原文依据，既有草稿不能变成新的测量证据；现场、商家和专业待办不会因模型少返回一个字段而自动消失。
 
