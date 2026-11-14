@@ -1,0 +1,59 @@
+purpose:
+  stands_in_for: DeepSeek POST /chat/completions over a local HTTP dependency simulation, with synthetic model responses and deliberate failures.
+  unblocks: Verification of the real Mingma API HTTP client, output validation, error mapping, version checks and safe error responses without provider credentials or billing.
+assumptions:
+  - id: documented-json-envelope
+    status: supported
+    claim: The caller uses DeepSeek Chat Completions with Bearer auth, non-streaming json_object output and disabled thinking, then parses choices[0].message.content as JSON.
+    reason: The request and response envelope follows the published DeepSeek Chat Completions and JSON Output documentation; synthetic response content is generated only for local integration tests.
+    verification: On 2026-11-14 the mock rejected requests that lacked the expected roles, operation payload, model, max_tokens, non-streaming setting, JSON mode or disabled thinking. All four real API paths reached the mock and returned schema-valid results.
+    source: https://api-docs.deepseek.com/api/create-chat-completion/ ; https://api-docs.deepseek.com/guides/json_mode/ ; postman/mocks/deepseek/default.js ; mingma-api/src/provider.ts
+    updated_at: '2026-11-14'
+  - id: wrapper-failure-handling
+    status: supported
+    claim: In the local cases exercised, the real API rejects invalid model output and exposes controlled errors for provider authentication, quota, rate limit, server failures and timeout, without returning raw upstream details or the dummy credential.
+    reason: The one-command runner calls the actual Node HTTP service and switches only its upstream HTTP dependency; it does not stub the service or its fetch client.
+    verification: On 2026-11-14 the runner passed 19 checks: four successful operations, fourteen failure scenarios and a stale-version request rejected before the provider. The mock counted 18 upstream calls. Seventeen completed request events were logged; the timed-out call entered the mock handler but was stopped before it completed. No automatic retries were observed.
+    source: mingma-api/scripts/simulation-check.ts ; postman/mocks/deepseek/default.js ; report.json and simulation.ndjson in the temporary evidenceDirectory emitted by the runner
+    updated_at: '2026-11-14'
+  - id: collection-through-real-api
+    status: supported
+    claim: The optional collection run exercises the actual API service against the local DeepSeek dependency, rather than replacing the API itself with a mock.
+    reason: The runner passes the API test address as the collection baseUrl and the actual API process is configured to use only the local dependency simulation with a dummy key.
+    verification: On 2026-11-14 the --collection run passed 19 baseline scenarios and 17 Postman assertions with zero failures. The dependency counted 22 calls, including four additional successful collection operations, and the simulation emitted 22 completed request events. The collection process exited with code 0. Requests and results were not uploaded to Postman cloud.
+    source: mingma-api/scripts/simulation-check.ts ; postman/collections/mingma-ai.postman_collection.json ; collection.txt and report.json in the temporary evidenceDirectory emitted by the runner
+    updated_at: '2026-11-14'
+  - id: intake-conversation-and-evidence
+    status: supported
+    claim: In the exercised local intake cases, the real API preserves item identity and external-verification tasks, removes answered or deferred questions, keeps draft output advisory, and refuses unsupported evidence or model-controlled structural references.
+    reason: The runner calls the actual intake route and replaces only its DeepSeek HTTP dependency. It inspects the normalized structured result rather than trusting the simulated model output as the expected answer.
+    verification: On 2026-11-14 the expanded runner passed 39 baseline checks, comprising the original 19 and 20 intake cases. The dependency recorded exactly 37 baseline calls. Cases covered initial extraction, answer continuation, draft mode, repeated questions, unsupported professional values, deferred-answer quantities, previous-draft values, suggestion priority, preserved site pending items, forged references, duplicate or omitted IDs, unknown dependencies, malformed output, instruction-like source material, and invalid history rejected before a model call. The initial four-operation collection passed 17 assertions (41 total calls). After regeneration, a fresh run of the five-operation collection passed 21 assertions with zero failures; that run had 42 total upstream calls and 42 completed request events. This proves the caller behavior for these modeled scenarios, not actual-model semantic reliability.
+    source: mingma-api/scripts/simulation-check.ts ; postman/mocks/deepseek/default.js ; mingma-api/src/intake.ts ; report.json in the emitted temporary evidenceDirectory
+    updated_at: '2026-11-14'
+  - id: canonical-project-background
+    status: supported
+    claim: In the local cases exercised, optional project background reaches the model as separately identified user data, its exact text can support a context citation, and duplicate background IDs are rejected before an upstream request.
+    reason: The actual API is invoked over HTTP against the local dependency; the synthetic response cites context:household, and the runner compares upstream counters around an invalid duplicate-context request.
+    verification: On 2026-11-14 the expanded run passed 41 baseline checks and 21 Postman assertions with zero failures. There were 38 baseline upstream calls and 43 total calls including the collection, with 43 completed request events. This establishes request propagation and citation validation for the tested contract, not the semantic quality of real model interpretation.
+    source: mingma-api/scripts/simulation-check.ts ; mingma-api/src/intake.ts ; postman/mocks/deepseek/default.js ; report.json in the emitted temporary evidenceDirectory
+    updated_at: '2026-11-14'
+  - id: actual-model-quality
+    status: unknown
+    claim: Real DeepSeek outputs will accurately extract user intent, distinguish missing evidence from contradictions, and remain schema-valid for all renovation input variations.
+    reason: Synthetic responses test HTTP and validation behavior, not the semantic accuracy or availability of an actual model. Provider credentials are never loaded by this runner.
+    verification: Not established by this simulation. Use separate, explicitly authorized live smoke tests and reviewed examples to evaluate real provider behavior; do not interpret the local success count as model-quality evaluation.
+    source: mingma-api/scripts/simulation-check.ts ; mingma-api/src/operations.ts
+    updated_at: '2026-11-14'
+fingerprints:
+  - id: initial-local-integration
+    date: '2026-11-14'
+    commit: null
+    cli: 'Postman CLI 1.79.0; Node.js 24.22.1; API working tree on codex/ai-api'
+  - id: intake-v2-local-integration
+    date: '2026-11-14'
+    commit: null
+    cli: 'Postman CLI 1.79.0; Node.js 24.22.1; API working tree on codex/ai-api; 39 baseline cases'
+  - id: canonical-context-local-integration
+    date: '2026-11-14'
+    commit: null
+    cli: 'Postman CLI 1.79.0; Node.js 24.22.1; API working tree on codex/ai-api; 41 baseline cases'

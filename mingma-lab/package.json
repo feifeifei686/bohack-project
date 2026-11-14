@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 5188 --strictPort",
     "build": "node scripts/check.mjs && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5188 --strictPort",
-    "test": "node --experimental-strip-types --test versions/*/src/domain.test.ts",
+    "test": "node --experimental-strip-types --test versions/*/src/domain.test.ts shared/*.test.ts",
     "format": "prettier --write gallery.css gallery.js index.html vite.config.ts versions/*/src/main.ts versions/*/src/style.css"
   },
   "dependencies": {

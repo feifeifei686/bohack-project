@@ -1,6 +1,14 @@
+import { initializeProjectContext, contextAnswers, projectContextChanged, renderRequirementsOverview, renderProjectContext, renderLegacyArchive, type ProjectContext } from '../../../shared/requirements-hub'
+import '../../../shared/requirements-hub.css'
+import { createRoomPlanning } from '../../../shared/room-planning'
+import { captureFloorplanHandoff, intakeWithSpaceMarkup, mountIntakeSpacePreview, type FloorplanHandoff } from '../../../shared/intake-space-preview'
+import { mountIntake } from '../../../shared/intake-ui'
+import { intakeRequirementRow, adoptedIntakeHtml, stateFromAdoptedIntake } from '../../../shared/intake-bridge'
+import type { IntakeDocument } from '../../../shared/intake-contract'
+import '../../../shared/intake-bridge.css'
 import './style.css'
 import { createHoloView } from './glass-model'
-import { ownerDimensions, merchantDimensions, dimensionBridges, type Dimension } from './dimensions'
+import { ownerDimensions, merchantDimensions, dimensionBridges } from './dimensions'
 import type { HouseView } from './house-view'
 import { rooms, routes, type LayerId } from './house-data'
 import {
@@ -19,18 +27,20 @@ import {
 
 type Page =
   | 'overview'
+  | 'planning'
   | 'clarify'
   | 'requirements'
   | 'compare'
   | 'space'
   | 'records'
   | 'vendor'
-  | 'dimensions'
-type Snapshot = { version: number; requirements: Requirement[]; at: string }
+type Snapshot = { version: number; requirements: Requirement[]; at: string; intakeDocument?: IntakeDocument; projectContext?: ProjectContext }
 type Feedback = { id: string; proposalId: string; version: number; items: string[]; at: string }
 type Selection = { proposal: Proposal; requirements: Snapshot; at: string; pending: string[] }
 type State = {
   schema: 1
+  intakeDocument?: IntakeDocument
+  projectContext?: ProjectContext
   brief: string
   answers: Answers
   question: number
@@ -42,25 +52,20 @@ type State = {
   events: { text: string; at: string }[]
   dirty: boolean
 }
-const KEY = 'mingma-lucid-v1'
-const SCALE_KEY = 'mingma-lucid-dimensions-v1'
-type ScaleValue = { maturity: number; priority: string; evidence: string }
-let scales: Record<string, ScaleValue> = {}
+const INTAKE_KEY = 'mingma-lucid-intake-v2'
+const legacyKeys = ['mingma-lucid-v1', INTAKE_KEY, 'mingma-lucid-dimensions-v1', 'mingma-lucid-drafts-v1']
 try {
-  scales = JSON.parse(localStorage.getItem(SCALE_KEY) || '{}')
+  for (const key of legacyKeys) localStorage.removeItem(key)
 } catch {
-  /* Leave malformed prior data untouched. */
+  // Current demo state lives in memory, even when the browser blocks storage.
 }
-function scaleFor(id: string) {
-  return scales[id] ?? { maturity: 0, priority: '必须', evidence: '' }
+let intakeDraft: string | null = null
+const demoIntakeStorage = {
+  getItem: () => intakeDraft,
+  setItem: (_key: string, value: string) => { intakeDraft = value },
 }
-function saveScales() {
-  try {
-    localStorage.setItem(SCALE_KEY, JSON.stringify(scales))
-  } catch {
-    toast('量表保存失败，请导出留存。')
-  }
-}
+let scales: Record<string, { maturity: number; priority: string; evidence: string }> = {}
+
 const empty = (): State => ({
   schema: 1,
   brief: '',
@@ -74,40 +79,23 @@ const empty = (): State => ({
   events: [],
   dirty: false,
 })
-let storageError = false
 let state: State = empty()
-try {
-  const raw = localStorage.getItem(KEY)
-  if (raw) {
-    const parsed = JSON.parse(raw)
-    if (
-      parsed.schema !== 1 ||
-      !Array.isArray(parsed.requirements) ||
-      !Array.isArray(parsed.snapshots) ||
-      !Array.isArray(parsed.proposals) ||
-      !parsed.answers
-    )
-      throw Error()
-    state = parsed
-  }
-} catch {
-  storageError = true
-}
+window.addEventListener('pageshow', event => {
+  if (event.persisted) location.reload()
+})
+if (location.hash === '#dimensions') history.replaceState(null, '', '#requirements')
 let page: Page = (location.hash.slice(1) as Page) || 'overview'
 let house: HouseView | undefined
-const DRAFT_KEY = 'mingma-lucid-drafts-v1'
+const planning = createRoomPlanning()
+let planningEntry: string | null | undefined
+let previewFrom: FloorplanHandoff | undefined
+let intakePreview: ReturnType<typeof mountIntakeSpacePreview> | undefined
+let intakeSession: ReturnType<typeof mountIntake> | undefined
+let intakeEntry: { focus: boolean; appendBrief?: string } | null = null
 let vendorDrafts: Record<string, ProposalItem[]> = {}
-try {
-  vendorDrafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}')
-} catch {}
 const draftKey = () => `${vendorId}-r${latest()?.version || 0}`
 function persistVendorDraft() {
   vendorDrafts[draftKey()] = clone(draftItems)
-  try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(vendorDrafts))
-  } catch {
-    toast('商家草稿保存失败，请先导出。')
-  }
 }
 let selectedRoom = 'kitchen',
   selectedRoute: string | null = null,
@@ -115,7 +103,6 @@ let selectedRoom = 'kitchen',
   vendorId: 'a' | 'b' = 'a',
   draftItems: ProposalItem[] = []
 let filter = 'all',
-  saveTimer: ReturnType<typeof setTimeout>,
   toastTimer: ReturnType<typeof setTimeout>
 const app = document.querySelector<HTMLDivElement>('#app')!
 const dialog = document.querySelector<HTMLDialogElement>('#detail-dialog')!
@@ -134,24 +121,15 @@ const stamp = (t: string) =>
 const now = () => new Date().toISOString()
 const clone = <T>(x: T): T => structuredClone(x)
 const latest = () => state.snapshots.at(-1)
+const projectContext = () => initializeProjectContext(state.projectContext, scales)
 const currentProposal = (id: 'a' | 'b') => state.proposals.filter((p) => p.vendorId === id).at(-1)
 const findings = (p: Proposal) =>
   reviewProposal(
     state.snapshots.find((s) => s.version === p.requirementVersion)?.requirements ?? [],
     p,
   )
-function save() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(state))
-    storageError = false
-  } catch {
-    storageError = true
-    toast('浏览器保存失败，请导出项目，避免丢失内容。')
-  }
-}
 function log(text: string) {
   state.events.unshift({ text, at: now() })
-  save()
 }
 function toast(message: string) {
   const el = document.querySelector('#toast')!
@@ -163,9 +141,10 @@ function toast(message: string) {
 function navigate(to: Page) {
   location.hash = to
   if (page === to) render()
-  window.scrollTo(0, 0)
+  if (!previewFrom) window.scrollTo(0, 0)
 }
 window.addEventListener('hashchange', () => {
+  if (location.hash === '#dimensions') history.replaceState(null, '', '#requirements')
   page = (location.hash.slice(1) as Page) || 'overview'
   render()
   window.scrollTo(0, 0)
@@ -210,13 +189,13 @@ const icon = (name: string, size = 20) =>
   </svg>`
 const navs: [Page, string, string][] = [
   ['overview', '项目概览', 'home'],
+  ['planning', '空间选择', 'cube'],
   ['clarify', '需求共创', 'chat'],
-  ['requirements', '需求清单', 'list'],
+  ['requirements', '我的需求', 'list'],
   ['compare', '方案比对', 'compare'],
   ['space', '空间预览', 'cube'],
   ['records', '确认记录', 'clock'],
 ]
-navs.splice(3, 0, ['dimensions', '需求维度量表', 'layers'])
 const btn = (text: string, action: string, cls = 'primary', extra = '') =>
   `<button class="${cls}" data-action="${action}" ${extra}>${text}</button>`
 const label = (f: Finding) =>
@@ -282,27 +261,21 @@ function shell(content: string) {
           <div><b>我的第一个家</b><small>厨房改造 · 示意项目</small></div>
         </div>
         <div class="header-actions">
-          <a
-            class="gallery-return"
-            href="../../index.html"
-            aria-label="返回设计展厅"
-            title="返回设计展厅"
-            >${icon('arrow', 15)}<span>返回设计展厅</span></a
-          ><button class="icon-button" data-action="about" aria-label="关于此演示">
+          <button class="icon-button" data-action="about" aria-label="关于此演示">
             ${icon('info', 18)}</button
           >${btn(`${icon('export', 16)}<span>导出项目</span>`, 'export', 'secondary-button small', 'aria-label="导出项目"')}
         </div>
       </div>
       <nav class="studio-navigation" aria-label="项目导航">
-        ${navs.map(([id, text, i]) => html`<a href="#${id}" class="nav-item ${page === id ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''}>${icon(i, 18)}<span>${id === 'dimensions' ? '需求维度' : text}</span>${id === 'compare' && state.feedback.length ? '<i class="nav-dot"></i>' : ''}</a>`).join('')}
+        ${navs.map(([id, text, i]) => html`<a href="#${id}" class="nav-item ${page === id ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''}>${icon(i, 18)}<span>${text}</span>${id === 'compare' && state.feedback.length ? '<i class="nav-dot"></i>' : ''}</a>`).join('')}
       </nav>
     </header>
     <main id="main-content" class="studio-main">
-      ${storageError ? '<p class="notice warn">本机保存异常，请导出当前项目留存。</p>' : ''}${content}
+      ${content}
     </main>
     <footer class="app-footer">
       <span>明码 · 让需求与空间相互回应</span>
-      <div><i class="project-dot"></i>规则引导 · 本地保存 · 资料为演示</div>
+      <div><i class="project-dot"></i>演示模式 · 刷新后重新开始</div>
     </footer>
   </div>`
 }
@@ -310,21 +283,6 @@ function shell(content: string) {
 function overview() {
   const snap = latest()
   const reqs = snap?.requirements ?? state.requirements
-  const room = rooms.find((r) => r.id === selectedRoom)!
-  const nextAction = hasCurrentSelection()
-    ? 'go-records'
-    : snap
-      ? 'go-compare'
-      : state.requirements.length
-        ? 'go-requirements'
-        : 'go-clarify'
-  const nextLabel = hasCurrentSelection()
-    ? '查看选择记录'
-    : snap
-      ? '继续审阅方案'
-      : state.requirements.length
-        ? '确认需求草稿'
-        : '开始梳理需求'
   const pending = reqs.reduce((sum, r) => sum + r.pending.length, 0)
   return html`<div class="workspace-intro">
       <div>
@@ -333,87 +291,23 @@ function overview() {
       </div>
       <div class="intro-state"><i class="project-dot"></i>${taskStage()}</div>
     </div>
-    <div class="mobile-next-action">
-      ${btn(`${nextLabel}${icon('arrow', 17)}`, nextAction)}${!reqs.length ? btn('体验案例', 'demo', 'text-button') : ''}
-    </div>
-    <section class="spatial-workbench" aria-label="空间与需求工作台">
-      <aside class="project-notebook glass-surface">
-        <div class="notebook-heading">
-          <span>${icon('file', 17)}项目简报</span
-          ><button class="icon-button" data-action="reset" aria-label="重置演示">
-            ${icon('reset', 16)}
-          </button>
-        </div>
-        <div class="brief-image">
-          <img src="../../assets/lucid.webp" alt="玻璃与自然窗光的室内材质参考" /><span
-            >把确定的事，写下来。</span
-          >
-        </div>
+    <section class="planning-home glass-surface">
+      <div class="planning-home-copy">
         <h2>我的第一个家</h2>
-        <p class="brief-description">
-          ${esc(state.brief || '还不需要懂施工术语，先说说你希望怎样使用厨房。')}
-        </p>
-        <dl class="project-facts">
-          <div>
-            <dt>改造范围</dt>
-            <dd>厨房</dd>
-          </div>
-          <div>
-            <dt>需求条目</dt>
-            <dd>${reqs.length ? reqs.length + ' 条' : '尚未建立'}</dd>
-          </div>
-          <div>
-            <dt>现场待办</dt>
-            <dd>${pending ? pending + ' 项' : '待梳理'}</dd>
-          </div>
-          <div>
-            <dt>当前基准</dt>
-            <dd>${snap ? 'R' + snap.version : '草稿准备'}</dd>
-          </div>
-        </dl>
+        <p>${esc(state.brief || '从一个房间开始，说说想改动什么、有哪些地方希望保留。')}</p>
         <div class="notebook-action">
-          ${btn(`${nextLabel}${icon('arrow', 17)}`, nextAction)}${!reqs.length ? btn('先体验一个完整案例', 'demo', 'text-button') : btn('查看全部需求', 'go-requirements', 'text-button')}
+          ${btn(`开始硬装规划${icon('arrow', 17)}`, 'go-planning')}
+          ${reqs.length ? btn('查看我的需求', 'go-requirements', 'text-button') : btn('体验完整案例', 'demo', 'text-button')}
         </div>
-        <p class="notebook-foot">${icon('info', 14)}需求由你确认，未知项保留待办。</p>
-      </aside>
-      <div class="room-canvas-shell">
-        <div class="canvas-heading">
-          <div>
-            <h2>你的空间</h2>
-            <p>一室一厅 · 67 m² · 示意户型</p>
-          </div>
-          <span class="canvas-mode">${icon('cube', 15)}交互模型</span>
-        </div>
-        <div id="house-canvas" class="home-canvas" aria-label="可交互的房间模型"></div>
-        <div class="canvas-toolbar">
-          <div class="view-controls-inline">
-            ${btn('轴测', 'view-iso', 'view-button')}${btn('俯视', 'view-top', 'view-button')}${btn(`${icon('layers', 15)}查看管线`, 'go-space', 'view-button')}
-          </div>
-          <small>拖动旋转 · 点选房间</small>
-        </div>
-        <div class="room-orbit" aria-label="选择房间">
-          ${rooms.map((r) => html`<button data-room="${r.id}" class="${r.id === selectedRoom ? 'selected' : ''}">${r.name}<span>${r.area}m²</span></button>`).join('')}
-        </div>
+        <dl class="project-facts">
+          <div><dt>需求条目</dt><dd>${reqs.length ? reqs.length + ' 条' : '尚未建立'}</dd></div>
+          <div><dt>现场待办</dt><dd>${pending ? pending + ' 项' : '待梳理'}</dd></div>
+          <div><dt>当前基准</dt><dd>${snap ? 'R' + snap.version : '草稿准备'}</dd></div>
+        </dl>
       </div>
-      <aside class="room-drawer glass-surface">
-        <div class="drawer-heading"><span>当前选区</span><span>${icon('plus', 15)}</span></div>
-        <div class="anchor-room">
-          <h2 id="overview-room-name">${room.name}</h2>
-          <span id="overview-room-area">${room.area}<small>m²</small></span>
-        </div>
-        <p id="overview-room-summary">
-          ${selectedRoom === 'kitchen' ? '从设备、布局与日常维护开始，让厨房更贴合你的生活。' : '先看清空间关系，首版需求工作流主要覆盖厨房。'}
-        </p>
-        <div class="drawer-rule"></div>
-        <div class="drawer-note-title">${icon('list', 16)}区域需求</div>
-        <div id="overview-room-needs">${overviewNeeds()}</div>
-        <button class="anchor-link" data-action="go-space">
-          打开空间工作区${icon('arrow', 17)}
-        </button>
-        <div class="measurement-note">
-          ${icon('info', 15)}面积和布局仅为示意，设备尺寸与实际接口仍需现场复核。
-        </div>
-      </aside>
+      <figure class="planning-home-photo">
+        <img src="/assets/lucid.webp" alt="自然窗光下的室内材质参考" fetchpriority="high" />
+      </figure>
     </section>
     <section class="project-path">
       <div class="section-title">
@@ -422,7 +316,7 @@ function overview() {
       </div>
       <div class="steps">
         ${[
-          ['clarify', '说清生活需求', '对话与选择题'],
+          ['planning', '选择空间', '按房间梳理硬装需求'],
           ['requirements', '形成共同清单', '逐项确认与发布'],
           ['compare', '审阅商家回应', '证据、差异与修订'],
           ['records', '留下你的选择', '版本和待办一起保存'],
@@ -475,47 +369,6 @@ function overview() {
         }
       </div>
     </section>`
-}
-
-function overviewNeeds() {
-  const reqs = (latest()?.requirements ?? state.requirements).filter(
-    (r) => r.room === '厨房' && selectedRoom === 'kitchen',
-  )
-  return reqs.length
-    ? reqs
-        .slice(0, 3)
-        .map(
-          (r) =>
-            html`<button class="drawer-need" data-action="space-req" data-id="${r.id}">
-              <span>${r.id}</span><b>${esc(r.title)}</b>${icon('chevron', 13)}
-            </button>`,
-        )
-        .join('')
-    : html`<div class="drawer-empty">
-        <span>${icon('chat', 20)}</span>
-        <p>
-          ${selectedRoom === 'kitchen' ? '从一句「厨房好打理」开始，逐步变成具体条件。' : '这个房间提供空间示意，尚未建立区域需求。'}
-        </p>
-        ${selectedRoom === 'kitchen' ? btn('说说你的想法', 'go-clarify', 'text-button') : ''}
-      </div>`
-}
-
-function updateOverviewRoom() {
-  const room = rooms.find((r) => r.id === selectedRoom)!
-  const name = document.querySelector('#overview-room-name')
-  if (!name) return
-  name.textContent = room.name
-  document.querySelector('#overview-room-area')!.innerHTML = `${room.area}<small>m²</small>`
-  document.querySelector('#overview-room-summary')!.textContent =
-    selectedRoom === 'kitchen'
-      ? '从设备、布局与日常维护开始，让厨房更贴合你的生活。'
-      : '先看清空间关系，首版需求工作流主要覆盖厨房。'
-  document.querySelector('#overview-room-needs')!.innerHTML = overviewNeeds()
-  document
-    .querySelectorAll('[data-room]')
-    .forEach((el) =>
-      el.classList.toggle('selected', (el as HTMLElement).dataset.room === selectedRoom),
-    )
 }
 
 const questions: {
@@ -583,76 +436,17 @@ const questions: {
   },
 ]
 function clarify() {
-  const q = questions[state.question]
-  const hasDraft = !!state.requirements.length
-  return html`${heading('把生活想法，说得更清楚', '先说你的需求，再一起补齐容易遗漏的细节。')}
-    <div class="clarify-layout">
-      <section class="conversation">
-        <div class="assistant-label">
-          <span class="assistant-icon">${icon('spark')}</span>
-          <div><b>明码需求助手</b><small>结构化问题引导 · 尚未接入大模型</small></div>
-          <span class="subtle">${q ? `${state.question + 1} / ${questions.length}` : '开始'}</span>
-        </div>
-        ${
-          !q
-            ? `<h2>你希望厨房有什么改变？</h2><p class="muted">不用专业术语，说说你怎么使用它、哪里不方便。</p><label class="field-label" for="brief">你的生活化需求</label><textarea id="brief" rows="6" maxlength="2000" placeholder="例如：厨房想好打理，电器够用，尽量保留现在的布局。">${esc(state.brief)}</textarea><button class="sample-prompt" data-action="sample-brief">试试这个想法：厨房好打理，预留洗碗机，保留原来的窗。</button><div class="conversation-actions"><span>自由表达会原样保留在需求来源中</span>${btn(`开始梳理${icon('arrow', 17)}`, 'start-questions')}</div>`
-            : `<div class="question-progress">${questions.map((_, i) => html`<span class="${i <= state.question ? 'done' : ''}"></span>`).join('')}</div><h2>${q.title}</h2><p class="muted">${q.why}${q.multi ? '（可多选）' : ''}</p><div class="answer-options">${q.options
-                .map((v, i) => {
-                  const checked = q.multi
-                    ? (state.answers[q.key] as string[]).includes(v)
-                    : state.answers[q.key] === v
-                  return html`<label class="answer-option ${checked ? 'selected' : ''}"
-                    ><input
-                      type="${q.multi ? 'checkbox' : 'radio'}"
-                      name="answer"
-                      value="${esc(v)}"
-                      ${checked ? 'checked' : ''}
-                    /><span><b>${v}</b><small>${q.descriptions[i]}</small></span
-                    ><span class="option-check">${checked ? icon('check', 15) : ''}</span></label
-                  >`
-                })
-                .join(
-                  '',
-                )}</div><div class="conversation-actions">${btn('上一步', 'previous', 'text-button')}${btn(`${state.question === 4 ? '生成需求草稿' : '下一步'}${icon('arrow', 17)}`, 'next-question')}</div>`
-        }
-      </section>
-      <aside class="summary-panel">
-        <h3>你正在说清楚的事</h3>
-        <p>确认的选择会成为需求草稿。暂不确定的内容会保留为待办。</p>
-        <dl>
-          ${questions
-            .map(
-              (q, i) =>
-                html`<div>
-                  <dt>
-                    <span>${i + 1}</span
-                    >${['改造布局', '设备清单', '日常维护', '柜体形式', '施工范围'][i]}
-                  </dt>
-                  <dd>
-                    ${esc(Array.isArray(state.answers[q.key]) ? (state.answers[q.key] as string[]).join('、') || '等待你的回答' : state.answers[q.key] || '等待你的回答')}
-                  </dd>
-                </div>`,
-            )
-            .join('')}
-        </dl>
-        ${hasDraft ? btn('查看已有草稿', 'go-requirements', 'secondary-button') : ''}
-        <div class="summary-foot">${icon('info', 16)}五个基础维度处理后，仍需你审核并发布。</div>
-      </aside>
-    </div>`
+  return html`${heading('把生活想法，变成清楚的需求', '先表达，再拆分与追问；全局、区域、公共项和待确认事项一起整理。')}${intakeWithSpaceMarkup(planning.model())}`
 }
 function requirements() {
-  if (!state.requirements.length)
-    return (
-      heading('我的需求清单', '每一条需求，都来自你的生活。') +
-      emptyPanel(
-        '先把想法整理出来',
-        '回答几个基础问题，就能得到一份可修改的需求草稿。',
-        'go-clarify',
-        '开始需求共创',
-      )
-    )
+  if (!state.requirements.length) return html`<div class="hub-root" data-variant="lucid">
+    ${heading('我的需求', '把改造要求、项目背景和待确认信息放在一起。')}
+    ${emptyPanel('先把想法整理成需求', '从一句生活化描述开始，AI 会拆分范围并补问缺少的信息。', 'go-clarify', '开始需求共创')}
+    ${renderProjectContext(projectContext())}
+    ${renderLegacyArchive(scales, ownerDimensions, merchantDimensions)}
+  </div>`
   const snap = latest()
-  return html`${heading('我的需求清单', '逐项检查描述与重要程度，确认后让商家围绕同一份需求回应。', btn(`${icon('plus', 16)}补充需求`, 'add-requirement', 'secondary-button'))}
+  return html`<div class="hub-root" data-variant="lucid">${heading('我的需求', '逐项检查描述与重要程度，确认后让商家围绕同一份需求回应。', btn(`${icon('plus', 16)}补充需求`, 'add-requirement', 'secondary-button'))}
     <div class="document-toolbar">
       <div>
         <span class="status ${state.dirty || !snap ? 'partial' : 'responded'}"
@@ -663,17 +457,19 @@ function requirements() {
         >
       </div>
       <div>
-        ${snap ? btn('查看版本', 'history', 'text-button') : ''}${btn(state.dirty || !snap ? '确认并发布需求' : '前往方案比对', state.dirty || !snap ? 'publish' : 'go-compare')}
+        ${snap ? btn('查看版本', 'history', 'text-button') : ''}${projectContextChanged(projectContext(), state.intakeDocument) && (state.dirty || !snap) ? btn('先更新需求草稿', 'go-clarify') : btn(state.dirty || !snap ? '确认并发布需求' : '前往方案比对', state.dirty || !snap ? 'publish' : 'go-compare')}
       </div>
     </div>
     <div class="notice">
       ${icon('info', 18)}设备尺寸与现场接口可以留待核实。发布代表开始方案协作，不代表施工条件已经确定。
     </div>
+    ${projectContextChanged(projectContext(), state.intakeDocument) ? '<div class="notice warn">项目背景已改变或与原梳理记录不同。请重新整理并采用草稿后再发布新版本；原发布版本保持不变，仍可用于方案比对。</div>' : ''}
+    <div class="hub-workspace">
     <section class="requirement-list">
       ${state.requirements
         .map(
-          (r, i) =>
-            html`<article class="requirement-row">
+          (r, i) => r.intake ? intakeRequirementRow(r, i) :
+            html`<article class="requirement-row" data-requirement-id="${esc(r.id)}">
               <span class="req-order">${String(i + 1).padStart(2, '0')}</span>
               <div class="req-content min-w-0 flex-1">
                 <div class="req-meta">
@@ -700,7 +496,12 @@ function requirements() {
         )
         .join('')}
     </section>
-    <p class="end-note">原始表达：${esc(state.brief || '完整演示案例')}</p>`
+    ${renderRequirementsOverview(state.requirements, state.intakeDocument, projectContext())}
+    </div>
+    <p class="end-note">原始表达：${esc(state.brief || '完整演示案例')}</p>
+    ${renderProjectContext(projectContext())}
+    ${renderLegacyArchive(scales, ownerDimensions, merchantDimensions)}
+  </div>`
 }
 function compare() {
   const snap = latest()
@@ -831,6 +632,9 @@ function compare() {
       ${icon('info', 18)}核对只检查商家声明与已配置的需求条件。额外项目、工艺可行性和现场情况需要人工确认。${btn('查看空间关联', 'go-space', 'text-button')}
     </div>`
 }
+function merchantContextGuide() {
+  return html`<div class="hub-root" data-variant="lucid"><details class="hub-merchant-guide"><summary>制作方案前的承接与协作检查</summary><p>围绕当前需求补充资料、承接边界和协作条件；具体回应填写在下面的对应需求中。</p><ul>${merchantDimensions.map(d => html`<li><b>${esc(d.name)}</b><p>${esc(d.question)}</p>${scales[d.id]?.evidence ? html`<p class="muted">历史协作记录（未指定商家）：${esc(scales[d.id].evidence)}</p>` : ''}</li>`).join('')}</ul></details></div>`
+}
 function vendor() {
   const snap = latest()
   if (!snap)
@@ -851,7 +655,7 @@ function vendor() {
           text: '',
         })),
     )
-  return html`${heading('商家方案工作区', '此处模拟商家操作；提交只保存到你的浏览器。', btn('返回方案比对', 'go-compare', 'secondary-button'))}
+  return html`${heading('商家方案工作区', '此处模拟商家操作；提交仅保留在本轮演示。', btn('返回方案比对', 'go-compare', 'secondary-button'))}
     <div class="document-toolbar">
       <div class="segmented">
         <button data-vendor="a" class="${vendorId === 'a' ? 'selected' : ''}">A · 木序设计</button
@@ -859,6 +663,7 @@ function vendor() {
       </div>
       <span>下一次提交 V${(p?.version || 0) + 1} · 对应需求 R${snap.version}</span>
     </div>
+    ${merchantContextGuide()}
     <div class="import-bar">
       <div>${icon('file')}<span>可编辑下面的回应，或使用 CSV 批量导入。</span></div>
       <div>
@@ -1031,131 +836,57 @@ function records() {
       </section>
     </div>`
 }
-function dimensionTable(ds: Dimension[]) {
-  return html`<p class="flex items-center gap-2 py-3 text-sm text-slate-500 lg:hidden">
-      ${icon('arrow', 16)}左右滑动查看完整量表
-    </p>
-    <div
-      class="table-wrap overflow-x-auto overscroll-x-contain"
-      tabindex="0"
-      aria-label="需求维度表格，可横向滚动"
-    >
-      <table class="dimension-table">
-        <thead>
-          <tr>
-            <th>拆解维度</th>
-            <th>关键问题与填写方式</th>
-            <th>应当形成的结果</th>
-            <th>重要程度</th>
-            <th>信息成熟度与依据</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${ds
-            .map((d) => {
-              const v = scaleFor(d.id)
-              return html`<tr>
-                <td>
-                  <small>${d.id}</small><b>${esc(d.name)}</b
-                  ><small>${d.required ? '需讨论或明确暂缓' : '按场景补充'}</small>
-                </td>
-                <td>${esc(d.question)}<small>${esc(d.options)}</small></td>
-                <td>${esc(d.output)}</td>
-                <td>
-                  <label class="sr-only" for="scale-priority-${d.id}">${d.name}重要程度</label
-                  ><select id="scale-priority-${d.id}" data-scale-priority="${d.id}">
-                    ${['必须', '偏好', '可选'].map((p) => html`<option ${v.priority === p ? 'selected' : ''}>${p}</option>`).join('')}
-                  </select>
-                </td>
-                <td>
-                  <label class="sr-only" for="scale-score-${d.id}">${d.name}信息成熟度</label
-                  ><select id="scale-score-${d.id}" data-scale-score="${d.id}">
-                    ${['0 · 未提供', '1 · 模糊表达', '2 · 明确未确认', '3 · 有依据已确认'].map((p, i) => html`<option value="${i}" ${v.maturity === i ? 'selected' : ''}>${p}</option>`).join('')}</select
-                  ><label class="field-label" for="scale-note-${d.id}">回答或确认依据</label
-                  ><textarea
-                    id="scale-note-${d.id}"
-                    data-scale-note="${d.id}"
-                    rows="2"
-                    maxlength="600"
-                    placeholder="填写实际回答、资料来源或确认记录"
-                  >
-${esc(v.evidence)}</textarea>
-                </td>
-              </tr>`
-            })
-            .join('')}
-        </tbody>
-      </table>
-    </div>`
-}
-function dimensions() {
-  return html`${heading('用户与商家需求维度量表', '用同一套结构提问，让双方的期待与协作条件具体可见。', btn(`${icon('export', 16)}导出量表`, 'export-scales', 'secondary-button'))}
-    <p class="dimension-intro max-w-prose text-pretty">
-      业主描述生活目标与限制；商家提出承接所需的资料、能力边界和协作条件。两张量表共同形成需求清单、待确认事项与方案回应依据。
-    </p>
-    <div class="scale-legend">
-      ${[
-        ['0 · 未提供', '没有记录这个维度的信息'],
-        ['1 · 模糊表达', '只有大概想法，仍需追问'],
-        ['2 · 明确未确认', '内容已具体，但当事人未确认'],
-        ['3 · 有依据已确认', '有资料或确认记录，能够回溯'],
-      ]
-        .map(
-          ([t, d]) =>
-            html`<div>
-              <strong>${t}</strong>
-              <p>${d}</p>
-            </div>`,
-        )
-        .join('')}
-    </div>
-    <p class="notice">
-      分值只表示信息成熟度，不表示方案质量或施工可行性。重要程度独立选择；暂不确定应保留待办。此表为项目设计工具，不是经过验证的心理量表。
-    </p>
-    <h2 class="dimension-heading flex items-baseline gap-3">业主需求 <small>10 个维度</small></h2>
-    ${dimensionTable(ownerDimensions)}
-    <h2 class="dimension-heading flex items-baseline gap-3">
-      商家承接与协作需求 <small>9 个维度</small>
-    </h2>
-    ${dimensionTable(merchantDimensions)}
-    <h2 class="dimension-heading flex items-baseline gap-3">双方如何对应</h2>
-    <p class="flex items-center gap-2 py-3 text-sm text-slate-500 lg:hidden">
-      ${icon('arrow', 16)}左右滑动查看完整量表
-    </p>
-    <div
-      class="table-wrap overflow-x-auto overscroll-x-contain"
-      tabindex="0"
-      aria-label="需求维度表格，可横向滚动"
-    >
-      <table class="dimension-table">
-        <thead>
-          <tr>
-            <th>业主侧</th>
-            <th>商家侧</th>
-            <th>共同产物</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${dimensionBridges
-            .map(
-              (b) =>
-                html`<tr>
-                  <td>${esc(b.owner)}</td>
-                  <td>${esc(b.merchant)}</td>
-                  <td>${esc(b.artifact)}</td>
-                </tr>`,
-            )
-            .join('')}
-        </tbody>
-      </table>
-    </div>`
-}
+
+
 function render() {
+  planning.leave()
+  intakeSession?.dispose()
+  intakePreview?.dispose()
+  intakePreview = undefined
+  intakeSession = undefined
   house?.dispose()
   house = undefined
-  const pages = { overview, clarify, requirements, compare, space, records, vendor, dimensions }
+  const pages = { overview, planning: planning.render, clarify, requirements, compare, space, records, vendor }
   if (!(page in pages)) page = 'overview'
   app.innerHTML = shell(pages[page]())
+  if (page === 'planning') planning.mount(document.querySelector<HTMLElement>('#room-planning')!, state.requirements)
+  if (page === 'clarify') {
+    intakePreview = mountIntakeSpacePreview(document.querySelector<HTMLElement>('.intake-space')!, previewFrom)
+    previewFrom = undefined
+    const area = planningEntry
+    planningEntry = undefined
+    intakeSession = mountIntake(document.querySelector<HTMLElement>('#intake-root')!, {
+      variant: 'lucid', initialBrief: state.brief, existingCount: state.requirements.length,
+      projectContext: contextAnswers(projectContext()),
+      planningArea: area,
+      storage: demoIntakeStorage,
+      spatialModel: planning.model(),
+      onSpatialFocus: intakePreview.update,
+      onFirstExpression: intakePreview.acknowledgeBrief,
+      onNotice: toast,
+      onAdopt: (requirements, document) => {
+        if (!requirements.length) { toast('请先确认至少一条本次需求。'); return }
+        state.brief = document.brief
+        state.requirements = clone(requirements)
+        state.intakeDocument = clone(document)
+        state.dirty = true
+        log('采用新的需求共创草稿，等待用户发布；已有版本保持不变')
+        navigate('requirements')
+        toast('需求草稿已采用，请核对后发布。')
+      },
+    })
+    const entry = intakeEntry
+    intakeEntry = null
+    if (entry?.focus) intakeSession.focusExpression()
+    if (entry?.appendBrief) {
+      const field = document.querySelector<HTMLTextAreaElement>('#intake-brief')
+      if (field && !field.value.includes(entry.appendBrief)) {
+        const combined = [field.value.trim(), entry.appendBrief].filter(Boolean).join('\n')
+        if (combined.length <= 4000) { field.value = combined; field.dispatchEvent(new Event('input', { bubbles: true })) }
+        else toast('便签已保存；当前表达较长，请整理后补入。')
+      }
+    }
+  }
   const navigation = document.querySelector<HTMLElement>('.studio-navigation')
   const activeNavigation = navigation?.querySelector<HTMLElement>('.nav-item.active')
   if (navigation && activeNavigation && navigation.scrollWidth > navigation.clientWidth) {
@@ -1165,15 +896,14 @@ function render() {
       navigation.clientWidth / 2 +
       activeNavigation.clientWidth / 2
   }
-  if (page === 'space' || page === 'overview') {
+  if (page === 'space') {
     const canvas = document.querySelector<HTMLElement>('#house-canvas')!
     house = createHoloView(canvas, {
       onRoomSelect: (id) => {
         if (!id) return
         selectedRoom = id
         selectedRoute = null
-        if (page === 'space') updateSpacePanel()
-        else updateOverviewRoom()
+        updateSpacePanel()
       },
       onRouteSelect: (id) => {
         if (page !== 'space') return
@@ -1206,6 +936,10 @@ function showDialog(title: string, body: string, footer = '') {
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) dialog.close()
 })
+function showAdoptedIntake() {
+  if (!state.intakeDocument) return
+  showDialog('已采用的需求共创文档', adoptedIntakeHtml(state.intakeDocument), btn('继续当前访谈', 'continue-intake', 'secondary-button') + btn('用此文档替换访谈草稿', 'restore-adopted-intake'))
+}
 function requirementForm(id?: string) {
   const req = state.requirements.find((r) => r.id === id)
   showDialog(
@@ -1253,7 +987,6 @@ document.addEventListener('click', (e) => {
     house?.selectRoom(selectedRoom)
     house?.selectRoute(null)
     if (page === 'space') updateSpacePanel()
-    else updateOverviewRoom()
     return
   }
   if (target.dataset.route) {
@@ -1270,18 +1003,23 @@ document.addEventListener('click', (e) => {
   }
   const id = target.dataset.id
   switch (action) {
+    case 'plan-current-room':
+    case 'plan-whole-home':
+      previewFrom = captureFloorplanHandoff()
+      planningEntry = action === 'plan-current-room' ? planning.selectedRoom()?.name : null
+      navigate('clarify')
+      break
     case 'close-dialog':
       dialog.close()
       break
     case 'about':
       showDialog(
         '关于这版明码',
-        `<p>这是可交互的网页 MVP，围绕厨房案例完成需求澄清、清单确认、模拟商家提交、规则核对、修订和方案选择。</p><dl class="about-list"><dt>数据保存</dt><dd>仅保存在当前浏览器，不会同步给真实商家。更换浏览器不会同步数据。</dd><dt>AI 接入</dt><dd>当前使用固定问题模板与透明规则，尚未调用大模型。不支持任意方案的专业审查。</dd><dt>空间模型</dt><dd>固定示意户型与路线，不能用作实际施工图。</dd></dl>`,
+        `<p>这是可交互的网页 MVP，支持多区域 AI 需求共创、清单确认与版本发布；商家提交、核对和选择保留演示流程。</p><dl class="about-list"><dt>数据保存</dt><dd>需求、方案和 AI 草稿仅保留在本轮。刷新或重新打开会清空，可先导出项目。</dd><dt>AI 接入</dt><dd>需求共创已接入 AI，可按全局、区域和公共项拆分并追问；商家方案页面仍使用演示规则，不构成专业审查。</dd><dt>空间模型</dt><dd>固定示意户型与路线，不能用作实际施工图。</dd></dl>`,
       )
       break
     case 'sample-brief':
       state.brief = '厨房想好打理，电器够用，希望加洗碗机，保留现有布局和窗户，不要开放展示格。'
-      save()
       render()
       break
     case 'start-questions':
@@ -1291,12 +1029,10 @@ document.addEventListener('click', (e) => {
         break
       }
       state.question = 0
-      save()
       render()
       break
     case 'previous':
       state.question = Math.max(-1, state.question - 1)
-      save()
       render()
       break
     case 'next-question': {
@@ -1308,7 +1044,6 @@ document.addEventListener('click', (e) => {
       }
       if (state.question < 4) {
         state.question++
-        save()
         render()
       } else {
         const build = () => {
@@ -1350,29 +1085,51 @@ document.addEventListener('click', (e) => {
     case 'reset':
       showDialog(
         '重置本机演示项目',
-        `<p>将清除当前浏览器中的本项目需求、维度量表、方案和确认记录。建议先导出项目。</p>`,
+        `<p>将清除本轮的需求、AI 草稿、方案和确认记录。建议先导出项目。</p>`,
         btn('取消', 'close-dialog', 'secondary-button') +
           btn('确认重置', 'confirm-reset', 'danger'),
       )
       break
     case 'confirm-reset':
+      planning.reset()
+      intakeDraft = null
       state = empty()
       vendorDrafts = {}
       scales = {}
-      localStorage.removeItem(SCALE_KEY)
-      localStorage.removeItem(DRAFT_KEY)
-      save()
       dialog.close()
       navigate('overview')
       toast('已重置当前演示项目')
       break
+    case 'hub-locate': {
+      const row = document.querySelector<HTMLElement>(`[data-requirement-id="${CSS.escape(id || '')}"]`)
+      if (row) { row.setAttribute('tabindex', '-1'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.focus({ preventScroll: true }) }
+      break
+    }
     case 'add-requirement':
+      if (state.intakeDocument) { intakeEntry = { focus: true }; navigate('clarify'); break }
       requirementForm()
       break
     case 'edit-requirement':
+      if (state.requirements.find(r => r.id === id)?.intake && state.intakeDocument) { showAdoptedIntake(); break }
       requirementForm(id)
       break
+    case 'view-adopted-intake':
+      showAdoptedIntake()
+      break
+    case 'restore-adopted-intake':
+      if (state.intakeDocument) {
+        intakeDraft = JSON.stringify(stateFromAdoptedIntake(state.intakeDocument))
+        dialog.close()
+        navigate('clarify')
+        toast('已复制已采用文档作为访谈草稿，重新修改并确认后再采用。')
+      }
+      break
+    case 'continue-intake':
+      dialog.close()
+      navigate('clarify')
+      break
     case 'publish':
+      if (projectContextChanged(projectContext(), state.intakeDocument)) { toast('项目背景已改变，请先重新整理并采用草稿。'); navigate('clarify'); break }
       showDialog(
         '确认发布需求',
         `<p>将发布 <b>R${(latest()?.version || 0) + 1}</b>，共 ${state.requirements.length} 条需求。商家将以这个版本制作方案。</p><h3>仍需确认</h3><ul>${state.requirements.flatMap((r) => r.pending.map((p) => html`<li>${esc(r.id)} · ${esc(p)}</li>`)).join('') || '<li>当前没有记录待确认事项。</li>'}</ul><p class="muted">这些待办不会因发布而自动消失。历史版本保持不变。</p>`,
@@ -1380,8 +1137,9 @@ document.addEventListener('click', (e) => {
       )
       break
     case 'confirm-publish': {
+      if (projectContextChanged(projectContext(), state.intakeDocument)) { dialog.close(); toast('项目背景已改变，请先重新整理并采用草稿。'); navigate('clarify'); break }
       const version = (latest()?.version || 0) + 1
-      state.snapshots.push({ version, requirements: clone(state.requirements), at: now() })
+      state.snapshots.push({ version, requirements: clone(state.requirements), at: now(), projectContext: clone(projectContext()), ...(state.intakeDocument ? { intakeDocument: clone(state.intakeDocument) } : {}) })
       state.dirty = false
       log(`发布需求 R${version}，共 ${state.requirements.length} 条`)
       dialog.close()
@@ -1612,10 +1370,11 @@ document.addEventListener('click', (e) => {
     }
     case 'export-scales':
       download(
-        '明码需求维度量表.json',
+        '明码历史维度记录.json',
         JSON.stringify(
           {
-            scale: '0未提供 1模糊表达 2明确未确认 3有依据已确认',
+            archiveOnly: true,
+            scale: '历史量表原始分值，仅用于追溯',
             ownerDimensions,
             merchantDimensions,
             dimensionBridges,
@@ -1626,7 +1385,7 @@ document.addEventListener('click', (e) => {
         ),
         'application/json',
       )
-      toast('量表定义与填写结果已导出。')
+      toast('历史维度填写已导出。')
       break
     case 'export':
       download(
@@ -1634,8 +1393,9 @@ document.addEventListener('click', (e) => {
         JSON.stringify(
           {
             exportedAt: now(),
-            mode: 'local-rule-based-demo',
+            mode: 'ai-intake-local-project',
             ...state,
+            projectContext: projectContext(),
             dimensionScales: scales,
             vendorDrafts,
           },
@@ -1650,10 +1410,15 @@ document.addEventListener('click', (e) => {
 })
 document.addEventListener('input', (e) => {
   const input = e.target as HTMLInputElement
+  if (input.dataset.contextText) {
+    const field = input.dataset.contextText
+    const checkbox = document.querySelector<HTMLInputElement>(`[data-context-confirm="${field}"]`)
+    if (checkbox) { checkbox.disabled = !input.value.trim(); checkbox.checked = false }
+    const status = document.querySelector<HTMLElement>(`[data-context-state="${field}"]`)
+    if (status) { status.textContent = '修改待保存'; status.classList.remove('hub-state--confirmed') }
+  }
   if (input.id === 'brief') {
     state.brief = input.value
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(save, 250)
   }
   if (input.dataset.proposalText) {
     const item = draftItems.find((i) => i.requirementId === input.dataset.proposalText)
@@ -1669,33 +1434,6 @@ document.addEventListener('input', (e) => {
 })
 document.addEventListener('change', async (e) => {
   const input = e.target as HTMLInputElement
-  if (input.dataset.scalePriority) {
-    const id = input.dataset.scalePriority
-    scales[id] = { ...scaleFor(id), priority: input.value }
-    saveScales()
-  }
-  if (input.dataset.scaleNote) {
-    const id = input.dataset.scaleNote
-    scales[id] = { ...scaleFor(id), evidence: input.value }
-    if (!input.value.trim() && scales[id].maturity === 3) {
-      scales[id].maturity = 2
-      const el = document.querySelector<HTMLSelectElement>(`[data-scale-score="${id}"]`)
-      if (el) el.value = '2'
-      toast('确认依据已清空，已调整为明确未确认。')
-    }
-    saveScales()
-  }
-  if (input.dataset.scaleScore) {
-    const id = input.dataset.scaleScore,
-      v = scaleFor(id)
-    if (input.value === '3' && !v.evidence.trim()) {
-      input.value = String(v.maturity)
-      toast('先填写回答或确认依据，再标记为已确认。')
-    } else {
-      scales[id] = { ...v, maturity: Number(input.value) }
-      saveScales()
-    }
-  }
   if (input.name === 'answer') {
     const q = questions[state.question]
     if (q.multi) {
@@ -1707,14 +1445,12 @@ document.addEventListener('change', async (e) => {
       else values = values.filter((v) => v !== '暂不确定')
       state.answers.devices = values
     } else (state.answers[q.key] as string) = input.value
-    save()
     render()
   }
   if (input.dataset.priority) {
     const r = state.requirements.find((r) => r.id === input.dataset.priority)!
     r.priority = input.value as 'must' | 'prefer'
     state.dirty = true
-    save()
     render()
   }
   if (input.dataset.commit) {
@@ -1756,6 +1492,24 @@ document.addEventListener('change', async (e) => {
 })
 document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement
+  if (form.id === 'project-context-form') {
+    e.preventDefault()
+    const values = new FormData(form)
+    const next = initializeProjectContext(undefined, {})
+    for (const field of ['household', 'schedule', 'confirmation'] as const) {
+      const text = String(values.get(field) || '').trim()
+      if (text.length > 1200) { toast('每项项目背景最多 1200 字。'); return }
+      next[field] = { text, confirmed: Boolean(text && values.get('confirm-' + field)) }
+    }
+    state.projectContext = next
+    state.dirty = true
+    log('保存项目背景，后续 AI 共创将使用同一份信息')
+    render()
+    const context = document.querySelector<HTMLDetailsElement>('.hub-context')
+    if (context) context.open = true
+    toast('项目背景已保存，下一轮 AI 共创会带入。')
+    return
+  }
   if (form.id !== 'requirement-form') return
   e.preventDefault()
   const data = new FormData(form)
@@ -1786,11 +1540,10 @@ document.addEventListener('submit', (e) => {
   render()
 })
 function demo() {
+  intakeDraft = null
   state = empty()
   scales = {}
-  localStorage.removeItem(SCALE_KEY)
   vendorDrafts = {}
-  localStorage.removeItem(DRAFT_KEY)
   state.brief = '厨房想好打理，电器够用，增加洗碗机，保留布局和窗户，不要开放展示格。'
   state.answers = {
     layout: '保留现有布局',

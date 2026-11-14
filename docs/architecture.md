@@ -1,6 +1,6 @@
 # 当前实现结构
 
-明码当前是浏览器本地运行的静态前端。推荐入口 `mingma-lab` 使用 Vite、TypeScript 与 Tailwind CSS 构建统一展厅和三套界面；没有后端、数据库、实际模型请求或商家通信服务。
+明码包含静态前端、同源网关和独立 AI 服务。`mingma-lab` 使用 Vite、TypeScript 与 Tailwind CSS 构建统一展厅和三套界面；三版的 `#clarify` 共用真实 AI 需求获取模块，调用 `mingma-api` 的 `/api/ai/intake`。方案比对与商家修订界面仍使用本地规则和模拟公司。当前没有数据库或真实商家通信服务。
 
 ## 工程之间的关系
 
@@ -9,8 +9,9 @@
 | `mingma-lab` | 当前主工程：设计展厅和三套完整流程 | 在该目录执行 `npm ci`、`npm run dev` |
 | `mingma-mvp` | 早期单版 MVP，保留迭代历史 | 在该目录安装；开发可使用 `npm run dev -- --port 5180` |
 | `mingma-3d` | 早期 Three.js / WebGL 户型线路实验 | 在该目录安装；开发可使用 `npm run dev -- --port 5178` |
+| `mingma-api` | Node.js + TypeScript + Zod 的无状态 AI 接口 | 在该目录安装、配置 `.env` 后 `npm start`；默认 5199 |
 
-三个目录是独立 npm 工程，不是 npm workspace。`mingma-lab/versions/` 下的三版由主工程统一构建，不应各自启动 Vite。
+各目录是独立 npm 工程，不是 npm workspace。`mingma-lab/versions/` 下的三版由主工程统一构建，不应各自启动 Vite。
 
 ## 主工程文件地图
 
@@ -19,9 +20,13 @@
 | `index.html`、`gallery.css`、`gallery.js` | 展厅、三版入口、截图和独立验收清单 |
 | `vite.config.ts` | Tailwind 插件、相对资源路径、展厅与三个版本的构建入口 |
 | `versions/<版本>/src/main.ts` | 页面模板、hash 导航、事件处理、状态与本地存储 |
-| `versions/<版本>/src/domain.ts` | 需求生成、方案文本核对、演示修订和 CSV 解析 |
+| `shared/intake-ui.ts`、`intake-ui.css` | 三版共享的表达、追问、编辑、确认和导出界面 |
+| `shared/intake-state.ts`、`intake-state.test.ts` | 访谈草稿、建议采纳、确认门槛、冲突与迟到响应保护 |
+| `shared/intake-contract.ts` | 前后端共用的公开类型与背景条目，不包含运行时依赖或密钥 |
+| `shared/requirements-hub.ts`、`requirements-hub.css`、`requirements-hub.test.ts` | 统一需求页的背景迁移、派生待办、只读历史记录及样式 |
+| `versions/<版本>/src/domain.ts` | 旧厨房演示需求、方案文本规则、演示修订和 CSV 解析 |
 | `versions/<版本>/src/domain.test.ts` | 该版领域规则测试 |
-| `versions/<版本>/src/dimensions.ts` | 10 项业主与 9 项商家维度定义 |
+| `versions/<版本>/src/dimensions.ts` | 旧维度名称与商家承接引导定义，不再提供独立评分界面 |
 | `versions/<版本>/src/house-data.ts` | 房间、尺寸和水电线路的演示数据 |
 | `versions/<版本>/src/glass-model.ts` 或 `atelier-model.ts` | 当前使用的交互空间投影绘制 |
 | `versions/<版本>/src/style.css` 及其导入样式 | 各版布局、视觉和响应式规则 |
@@ -29,15 +34,20 @@
 | `scripts/check.mjs` | 分别执行三版 TypeScript 检查 |
 | `scripts/package-delivery.py` | 将构建产物与源码打包并输出 ZIP 校验清单 |
 
-`<版本>` 为 `atmosphere`、`lucid` 或 `atelier`。目录中保留了早期空间渲染文件；当前实际使用的渲染器以 `main.ts` 导入为准。三版领域逻辑目前各自保存，语义相同，并非已经提取成共享包。
+`<版本>` 为 `atmosphere`、`lucid` 或 `atelier`。目录中保留了早期空间渲染文件；当前实际使用的渲染器以 `main.ts` 导入为准。新需求获取逻辑共用 `shared/`；旧方案规则仍分别保存在三版目录中。
 
 ## 页面与状态
 
-每版使用同一组 hash 路由：`#overview`、`#clarify`、`#requirements`、`#dimensions`、`#compare`、`#vendor`、`#space`、`#records`。静态服务器只需要提供文件，不需要应用路由回退或服务端 API。
+每版有七个有效页面：`#overview`、`#clarify`、`#requirements`、`#compare`、`#vendor`、`#space`、`#records`。`#requirements` 统一显示“我的需求”；旧 `#dimensions` 兼容跳转到该页，独立维度导航与评分表已撤下。页面路由不需要服务器回退；真实 AI 共创需要同源 `/api` 转发。Vite 开发服务默认代理到 5199，本机部署由 `scripts/local-web.mjs` 同时提供构建产物和 API 转发；单独解压静态 ZIP 不包含这项服务。
 
 ```mermaid
 flowchart TD
-    UI[页面输入与交互] --> Draft[需求和商家草稿]
+    UI[生活表达与区域选择] --> AI[AI拆分与最多两题追问]
+    AI --> Intake[四组草稿 编辑 采纳与逐项确认]
+    Intake --> Adopt[用户明确采用]
+    Adopt --> Draft[我的需求中的未发布草稿]
+    Context[项目背景的唯一记录] --> AI
+    Draft --> Pending[从原需求派生的待确认视图]
     Draft --> Publish[用户明确发布需求版本]
     Publish --> Snapshot[不可变需求快照]
     Snapshot --> Proposal[商家方案引用需求版本]
@@ -51,11 +61,25 @@ flowchart TD
     Archive --> Storage
 ```
 
-三版分别使用 `mingma-atmosphere-*`、`mingma-lucid-*` 和 `mingma-atelier-*` 命名空间。每版项目、量表与商家草稿使用不同键；展厅验收清单另存。不同浏览器、网址或端口不会自动共享这些数据。导出项目可保存 JSON 记录，目前没有服务端备份或完整跨设备导入流程。
+三版分别使用 `mingma-atmosphere-*`、`mingma-lucid-*` 和 `mingma-atelier-*` 命名空间。访谈状态独立保存于各版 `*-intake-v2` 键；项目保存当前需求与 `projectContext`，商家草稿另存。旧 `*-dimensions-v1` 键保留作只读历史，不再作为新的填写入口或完成状态来源。不同浏览器、网址或端口不会自动共享这些数据。访谈可导出 Markdown 或 JSON，项目仍可导出 JSON；目前没有服务端备份或完整跨设备导入流程。
+
+## 统一需求页与背景来源
+
+“我的需求”的待确认区域直接读取当前需求：有 intake 元数据时使用 `intake.pending`，旧需求使用原 `pending`。同一需求、责任人和问题的重复记录合并展示，不复制出另一份可编辑待办，也不根据关键词自动打成熟度分。
+
+`projectContext` 只包含使用者与生活习惯、居住安排与时间、交付与确认方式三个字段，每项有原文和用户核对状态。初次读取时，尚无新字段可从旧 O01、O08、O09 取得原文；旧确认状态只有在有原文依据时才保留。新字段一旦保存，即使后来主动清空，也不会被旧表的值重新填回。
+
+保存的背景随 intake 请求传入，在共创中只读显示；修改只在“我的需求”进行。背景变化会撤销旧确认并要求重新整理，新的采用文档和发布快照保存所使用的背景。`confirmed` 表示用户核对信息，不是专业事实或工程认证。
+
+商家九个维度出现在商家工作区，作为承接范围、资料、能力边界和协作条件的回应引导。用户仍在对应需求下填写商家方案，不再填一张独立评分表。旧商家记录没有绑定具体企业，历史查看与导出时保留其原身份，不自动赋给木序设计或栖居营造。
 
 ## 核对规则与数据约定
 
-需求 `Requirement` 保存编号、区域、工项分类、描述、优先级、来源和待确认事项。主流程使用五组问题生成厨房需求 K01–K06，其中洗碗机配套 K02 仅在选中该设备时生成。原始生活化表达会保存，但本版没有任意自然语言语义解析能力。
+新流程的 `IntakeItem` 保存稳定编号、`scope`、多区域关联、工程类别、构件、描述、来源、必要性、清晰度、原文证据、可检查标准、待确认任务和依赖。`scope` 区分全局、区域、公共和归属待定；待确认清单是同一条目的状态视图，不重复生成施工项。
+
+用户明确采用时，已确认条目转换成兼容现有页面的 `Requirement`，并附带 intake 元数据；完整访谈文档保留未采纳建议、暂缓和排除项。建议需显式采纳，未逐项确认、必须项冲突、必要业主决策未解决或未确认替换现有草稿时，不能采用。采用只更新未发布草稿，正式发布仍由用户在“我的需求”完成，快照同时保存当时的项目背景，旧快照保留。
+
+首页“完整演示”仍使用原厨房 K01–K06 案例，用于查看本地商家协作闭环；它与真实 AI 访谈入口明确分开。
 
 方案 `Proposal` 保存商家、方案版本及所引用的需求版本。每条 `ProposalItem` 用需求编号关联原文和商家的回应状态。CSV 提交字段为：
 
@@ -75,7 +99,7 @@ K02,partial,"已预留洗碗机安装位与电源，供水和排水配套待补�
 | `conflict` | 商家表示无法回应，或原文与明确的需求边界冲突 |
 | `unknown` | 缺少资料、重复回应、尚未确定，或不在自动规则覆盖范围 |
 
-规则只对已知生成描述运行。用户修改描述或新增自定义需求后会进入人工核对状态，避免继续沿用旧模板作出结论。`responded` 也不表示现场条件已确认或施工可行。
+方案比对页面的旧规则只对已知演示描述运行。AI 生成或手动编辑的需求不会自动套用旧厨房模板判为通过；超出规则范围时仍需人工核对。`responded` 也不表示现场条件已确认或施工可行。独立的 AI `review`、`explain` 接口已保留，但本轮没有替换商家页面的核对逻辑。
 
 ## 空间表达
 
@@ -85,6 +109,12 @@ K02,partial,"已预留洗碗机安装位与电源，供水和排水配套待补�
 
 ## 运行与验证边界
 
-`npm test` 运行三版领域测试；`npm run build` 运行三版 TypeScript 检查并构建所有 HTML 入口。浏览器脚本和视觉检查单独执行，历史记录见[验收摘要](../mingma-lab/review/verification.json)。源码中仍保留 Three.js 相关实验代码，因此依赖中存在 `three`，不代表当前主页面依赖 WebGL。
+`npm test` 运行三版领域测试与共享 intake 状态测试；`npm run build` 检查 TypeScript 并构建所有 HTML 入口。浏览器与视觉验收单独执行，本轮整合结果见[发布验证](requirements-unification-verification.json)，前一轮需求共创结果见[历史发布验证](intake-release-verification.json)，旧记录见[历史摘要](../mingma-lab/review/verification.json)。源码中保留 Three.js 实验代码，不代表当前主页面依赖 WebGL。
 
-后续接入真实服务时，应先约定需求快照、方案修订、证据来源、未知状态和访问权限，保持现有版本语义。这里记录的是前端实现，不是已发布的 API 契约。
+AI 服务的协议见[接口契约](api/README.md)；Zod schema 同时用于校验与 OpenAPI 生成。主入口在 `mingma-api/src/server.ts`，HTTP 边界在 `app.ts`，提供商适配在 `provider.ts`；新流程定义和约束在 `intake.ts`，原四接口在 `operations.ts`。每次请求携带上下文，不将项目写入数据库。数值必须具有当前用户原文依据，既有草稿不能变成新的测量证据；现场、商家和专业待办不会因模型少返回一个字段而自动消失。
+
+浏览器接入保留原输入、可编辑草稿与来源数组。取消、超时、页面离开和新一轮编辑会阻止过期结果覆盖当前内容，错误不会静默退回演示答案。服务没有账号、数据库或自动发送权限，返回成功不代表需求已经发布。
+
+## 局域网访问边界
+
+本机部署仍将 API 5199 绑定到回环地址。LAN 网关允许同一私有 IPv4 局域网中的设备直接调用同源 `POST /api/ai/intake`，无需访问码；其他 API 和诊断入口对远端仍返回 403。网关继续检查 Host 与 Origin，后端保留请求频率和并发限制；浏览器不持有 DeepSeek 密钥。

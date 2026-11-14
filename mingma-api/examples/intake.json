@@ -1,0 +1,11 @@
+{
+  "brief": "厨房想好打理，加一台洗碗机；客厅和走道地面想连贯，水电我不太懂。厨房保留现有布局和窗。",
+  "areas": ["厨房", "客厅", "走道"],
+  "answers": [],
+  "previousItems": [],
+  "projectContext": [
+    { "id": "household", "text": "3人常住，每天在家做饭。", "confirmed": true },
+    { "id": "schedule", "text": "施工期间继续居住，厨房不能长时间停用。", "confirmed": false }
+  ],
+  "mode": "refine"
+}

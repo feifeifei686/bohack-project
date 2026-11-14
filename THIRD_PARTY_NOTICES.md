@@ -12,4 +12,4 @@ Atelier 使用 Noto Serif SC 的本地界面字形子集，遵循 SIL Open Font 
 
 ## 软件依赖
 
-Vite、TypeScript、Tailwind CSS、Three.js、Prettier 等依赖由各工程的 `package.json` 和 `package-lock.json` 记录，许可分别以依赖包内的许可证为准。此说明不替代依赖许可证，也不为项目自有代码新增开源授权。
+Vite、TypeScript、Tailwind CSS、Three.js、Prettier、Zod 等依赖由各工程的 `package.json` 和 `package-lock.json` 记录，许可分别以依赖包内的许可证为准。此说明不替代依赖许可证，也不为项目自有代码新增开源授权。

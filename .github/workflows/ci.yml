@@ -1,4 +1,4 @@
-name: Frontend checks
+name: Project checks
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [mingma-lab, mingma-mvp, mingma-3d]
+        project: [mingma-lab, mingma-mvp, mingma-3d, mingma-api]
     defaults:
       run:
         working-directory: ${{ matrix.project }}
@@ -37,11 +37,17 @@ jobs:
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
       - name: Install locked dependencies
         run: npm ci
-      - name: Run domain tests
+      - name: Run automated tests
         if: matrix.project != 'mingma-3d'
         run: npm test
       - name: Check types and build
         run: npm run build
+      - name: Verify API contract is up to date
+        if: matrix.project == 'mingma-api'
+        run: git -C .. diff --exit-code -- docs/api/openapi.json postman/collections/mingma-ai.postman_collection.json
+      - name: Check local static gateway
+        if: matrix.project == 'mingma-api'
+        run: node --test ../scripts/*.test.mjs
       - name: Package design lab preview
         if: matrix.project == 'mingma-lab'
         run: python3 scripts/package-delivery.py

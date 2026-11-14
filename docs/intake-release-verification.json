@@ -1,0 +1,94 @@
+{
+  "verifiedAt": "2026-11-14T02:04:35.545129+00:00",
+  "deployment": {
+    "type": "macOS launchd local deployment",
+    "localUrl": "http://127.0.0.1:5188/versions/lucid/index.html#clarify",
+    "lanUrl": "http://10.223.61.95:5188/versions/lucid/index.html#clarify",
+    "lanIntakeAccess": "8-digit host-managed capability; other API routes remain local-only",
+    "publicInternetDeployment": false
+  },
+  "automated": {
+    "frontendTests": 56,
+    "apiTests": 48,
+    "gatewayLifecycleTests": 6,
+    "typecheckAndBuild": "passed",
+    "openapiSyntaxLint": "passed"
+  },
+  "simulation": {
+    "scenarios": 39,
+    "postmanAssertions": 21,
+    "failures": 0,
+    "mode": "real API against a local synthetic DeepSeek HTTP dependency"
+  },
+  "browser": {
+    "intakeFlowChecksPerVariant": 19,
+    "variants": [
+      "atmosphere",
+      "lucid",
+      "atelier"
+    ],
+    "legacyMerchantFlowChecksPerVariant": 14,
+    "errorRecovery": "provider error preserves input and draft; explicit retry succeeds",
+    "lanCapabilityFlow": "unauthorized request prompts for code; correct test code reaches intake and renders questions",
+    "mobileWidth": 390,
+    "desktopWidth": 1440,
+    "visualsReviewed": [
+      "atmosphere expression/questions/draft",
+      "lucid draft",
+      "atelier expression"
+    ],
+    "horizontalOverflowObserved": false
+  },
+  "live": {
+    "provider": "DeepSeek official",
+    "model": "deepseek-flash",
+    "initialIntake": {
+      "httpStatus": 200,
+      "items": 6,
+      "questions": 2
+    },
+    "answeredDraft": {
+      "httpStatus": 200,
+      "items": 6,
+      "questions": 0,
+      "stableIds": true,
+      "unknownMeasurementsRetained": true
+    },
+    "deployedBrowser": {
+      "httpStatus": 200,
+      "items": 4,
+      "regions": [
+        "厨房",
+        "客厅",
+        "走道"
+      ],
+      "questionRendered": true
+    }
+  },
+  "reviewFixes": [
+    "New answers revoke related confirmations",
+    "Client edits do not exceed pending-list budget",
+    "Adding multi-area requirements stays in the new flow",
+    "Adopted documents are distinct from newer unadopted conversations",
+    "Expression focus occurs after hash-route mounting"
+  ],
+  "limits": [
+    "Local browser persistence; no account or cross-device project sync.",
+    "Real model validation covers synthetic examples, not general renovation correctness.",
+    "Merchant comparison page still uses its existing local demonstration rules.",
+    "Floorplan upload to 3D remains a separate planned feature.",
+    "Changes are local; no public cloud deployment or GitHub push was performed in this task."
+  ],
+  "subsequentChanges": [
+    {
+      "at": "2026-11-14T02:10:34.845468+00:00",
+      "change": "Removed LAN intake access code at user request",
+      "verification": {
+        "gatewayTestsPassed": 6,
+        "frontendTypecheckAndBuild": "passed",
+        "deployedLanBrowser": "AI question appeared without password field or error"
+      },
+      "scope": "Private-network intake remains same-origin; other API routes remain local-only"
+    }
+  ]
+}

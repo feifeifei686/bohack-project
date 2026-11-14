@@ -1,0 +1,47 @@
+{
+  "verifiedAt": "2026-11-14T02:35:17.805667+00:00",
+  "deployment": "macOS local/LAN service updated; no public cloud deployment",
+  "routes": {
+    "canonical": "#requirements",
+    "oldDimensions": "redirects to #requirements"
+  },
+  "automatedTests": {
+    "frontend": 72,
+    "api": 52,
+    "gatewayLifecycle": 6,
+    "failed": 0
+  },
+  "simulation": {
+    "scenarios": 41,
+    "postmanAssertions": 21,
+    "failed": 0
+  },
+  "browser": {
+    "unificationChecksPerVariant": 23,
+    "legacyFlowChecksPerVariant": 14,
+    "variants": [
+      "atmosphere",
+      "lucid",
+      "atelier"
+    ],
+    "desktopWidth": 1440,
+    "mobileWidth": 390,
+    "observedHorizontalOverflow": false,
+    "deployedOldRouteRedirect": true
+  },
+  "dataPreservation": [
+    "Legacy dimension records remain byte-preserved and read-only",
+    "Canonical cleared background fields do not resurrect old notes",
+    "Published snapshots remain immutable",
+    "Background changes invalidate stale AI confirmation and publication"
+  ],
+  "live": {
+    "intakeWithProjectContext": "HTTP 200 through deployed LAN gateway",
+    "model": "deepseek-flash"
+  },
+  "limits": [
+    "Browser-local persistence; no cross-device project synchronization",
+    "Merchant scenario remains a local demonstration",
+    "Historical screenshots and dated verification records are retained as history"
+  ]
+}
