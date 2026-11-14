@@ -204,6 +204,23 @@ test('background snapshots stay separate from the forty-answer budget and are co
   assert.equal(state.projectContext![0]!.text, '先看逐项说明，由业主确认。')
 })
 
+test('a long interview retains its answers and sends recent and cited evidence within the request budget', () => {
+  let state = stateFor()
+  for (let index = 0; index < 50; index++) {
+    state = answerQuestion(state, { ...question, id: `long-${index}` }, '描述'.repeat(750), 'answered')
+  }
+  state.result!.items[0]!.evidence = [{ sourceId: 'answer:long-0', quote: '描述' }]
+  state = restoreIntakeState(JSON.stringify(state))
+  const request = toIntakeRequest(state)
+  assert.equal(state.answers.length, 50)
+  assert.ok(request.answers.some(answer => answer.id === 'long-0'))
+  assert.equal(request.answers.at(-1)?.id, 'long-49')
+  assert.ok(new TextEncoder().encode(JSON.stringify(request)).byteLength <= 128 * 1024)
+  const resumed = applyIntakeResult(state, result([item()], { questions: [{ ...question, id: 'long-1', text: '请确认另一个部位。' }] }))
+  assert.equal(pendingQuestions(resumed).length, 1)
+  assert.notEqual(pendingQuestions(resumed)[0]?.id, 'long-1')
+})
+
 test('invalid or duplicate saved project background is rejected instead of silently changing sources', () => {
   const state = stateFor()
   assert.throws(() => restoreIntakeState(JSON.stringify({ ...state, projectContext: [{ id: 'unknown', text: '内容', confirmed: true }] })), /项目背景/)

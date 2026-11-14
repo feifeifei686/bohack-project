@@ -1,3 +1,4 @@
+import { requestIntake } from './intake-request.ts'
 import './intake-ui.css'
 import type { PlanningModel } from './planning-floorplan'
 import { intakeSpatialFocus, type SpatialFocus } from './intake-spatial-focus.ts'
@@ -6,7 +7,7 @@ import {
   IntakeRequestGate, adoptionIssues, adoptionPayload, answerQuestion, applyIntakeResult,
   deferConflict, editIntakeItem, includedItems, intakeDocument, necessityLabels,
   newIntakeState, ownerLabels, pendingQuestions, restoreIntakeState, scopeLabels,
-  toIntakeRequest, validResult, syncProjectContext, projectContextLabels, type IntakeState,
+  toIntakeRequest, syncProjectContext, projectContextLabels, type IntakeState,
 } from './intake-state.ts'
 
 type Options = {
@@ -66,6 +67,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
   }
   let disposed = false
   let busy = false
+  let retryAttempt = 0
   let requestFeedback: 'error' | 'cancelled' | null = null
   let expressionAcknowledged = false
   let error = ''
@@ -127,7 +129,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
   function requestStatusMarkup() {
     if (!busy && !requestFeedback) return ''
     const message = busy
-      ? lastMode === 'draft' ? 'AI 正在整理需求草稿…' : 'AI 正在梳理你的需求…'
+      ? retryAttempt ? `连接暂时中断，AI 正在重试（${retryAttempt}/2）…` : lastMode === 'draft' ? 'AI 正在整理需求草稿…' : 'AI 正在梳理你的需求…'
       : requestFeedback === 'error' ? '本次整理未完成' : '已取消整理'
     const detail = requestFeedback === 'error' ? error : requestFeedback === 'cancelled' ? '已保留本轮输入和草稿。' : ''
     const actions = busy
@@ -268,26 +270,18 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
     const payload = toIntakeRequest(state, mode)
     controller = new AbortController()
     const requestController = controller
-    const timer = setTimeout(() => requestController.abort(), 65000)
+    retryAttempt = 0
     lastMode = mode; busy = true; requestFeedback = null; error = ''; info = ''; lastRequestId = ''
     render()
     let completed = false
     try {
-      const response = await fetch('/api/ai/intake', {
-        method: 'POST', credentials: 'omit', redirect: 'error', signal: requestController.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const result = await requestIntake(payload, requestController.signal, attempt => {
+        if (!gate.accepts(token)) return
+        retryAttempt = attempt
+        render()
       })
-      let body: unknown
-      try { body = await response.json() } catch (failure) { if (requestController.signal.aborted) throw failure; throw new Error('服务返回的内容无法解析，请稍后重试。') }
       if (!gate.accepts(token) || state.revision !== revision) return
-      const result = body as Partial<IntakeResponse> & { error?: { code?: string; message?: string } }
-      lastRequestId = typeof result?.requestId === 'string' ? result.requestId : ''
-      if (!response.ok) {
-
-        throw new Error(result?.error?.message || `这次整理没有完成（${response.status}），原输入和草稿已保留。`)
-      }
-      if (!result || result.meta?.requiresHumanConfirmation !== true || !validResult(result.data)) throw new Error('返回结果不符合需求清单格式，已保留原草稿，请重试。')
+      lastRequestId = result.requestId
       state = applyIntakeResult(state, result.data)
       if (mode === 'draft') state.stage = 'draft'
       lastMeta = result.meta
@@ -296,10 +290,10 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
       persist()
     } catch (failure) {
       if (!gate.accepts(token) || state.revision !== revision) return
-      error = requestController.signal.aborted ? '本次整理等待超时。你的输入和原草稿已保留，可以重新尝试。' : failure instanceof Error ? failure.message : '暂时无法完成整理，请稍后重试。'
+      if (failure instanceof Error && 'requestId' in failure && typeof failure.requestId === 'string') lastRequestId = failure.requestId
+      error = failure instanceof Error ? failure.message : '暂时无法完成整理，请稍后重试。'
       requestFeedback = 'error'
     } finally {
-      clearTimeout(timer)
       if (gate.accepts(token)) {
         busy = false
         controller = null
