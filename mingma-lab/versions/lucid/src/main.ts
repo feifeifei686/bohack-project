@@ -10,6 +10,13 @@ import './style.css'
 import './home.css'
 import './luminous-workspace.css'
 import './planning-entry.css'
+import './guided-workflow.css'
+import { evaluateAssessment, assessmentIsStale, blockedIssues, assessmentOwners, type AssessmentInput, type AssessmentRun, type AssessmentNote, type Dimension } from '../../../shared/assessment'
+import { renderAssessment, renderAssessmentArchive } from '../../../shared/assessment-ui'
+import '../../../shared/assessment.css'
+import { localRecordId } from '../../../shared/local-record-id'
+import { projectSteps, unlockedStep, canVisit, stepInstructions, type ProjectStep } from './project-flow'
+import { proposalSamples, createSampleProposal } from './proposal-samples'
 import { mountHomeScene } from './home-scene'
 import { createHomeArrival } from './home-arrival'
 import { createHoloView } from './glass-model'
@@ -40,11 +47,14 @@ type Page =
   | 'space'
   | 'records'
   | 'vendor'
-type Snapshot = { version: number; requirements: Requirement[]; at: string; intakeDocument?: IntakeDocument; projectContext?: ProjectContext }
+  | 'assessment'
+type Snapshot = { version: number; requirements: Requirement[]; at: string; intakeDocument?: IntakeDocument; projectContext?: ProjectContext; assessment?: AssessmentRun }
 type Feedback = { id: string; proposalId: string; version: number; items: string[]; at: string }
-type Selection = { proposal: Proposal; requirements: Snapshot; at: string; pending: string[] }
+type Selection = { proposal: Proposal; requirements: Snapshot; at: string; pending: string[]; assessment?: AssessmentRun }
 type State = {
   schema: 1
+  assessments: AssessmentRun[]
+  assessmentNotes: AssessmentNote[]
   intakeDocument?: IntakeDocument
   projectContext?: ProjectContext
   brief: string
@@ -74,6 +84,8 @@ let scales: Record<string, { maturity: number; priority: string; evidence: strin
 
 const empty = (): State => ({
   schema: 1,
+  assessments: [],
+  assessmentNotes: [],
   brief: '',
   answers: { layout: '', devices: [], cleaning: '', cabinet: '', window: '' },
   question: -1,
@@ -86,6 +98,11 @@ const empty = (): State => ({
   dirty: false,
 })
 let state: State = empty()
+let planningChosen = false
+let furthestUnlocked = 1
+let samplePreview: 'a' | 'b' | null = null
+let assessmentTarget = ''
+let assessmentFilter: Dimension | 'all' = 'all'
 window.addEventListener('pageshow', event => {
   if (event.persisted) location.reload()
 })
@@ -149,7 +166,13 @@ function toast(message: string) {
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => el.classList.remove('show'), 3800)
 }
+function syncFlow() {
+  furthestUnlocked = unlockedStep(furthestUnlocked, { planningChosen, requirements: state.requirements.length, published: state.snapshots.length, proposals: state.proposals.length, selected: !!state.selection })
+}
+function routeAllowed(to: string) { syncFlow(); return canVisit(to, furthestUnlocked) }
+function blockedHint() { return `请先完成“${navs.find(n => n[0] === projectSteps[furthestUnlocked - 1])?.[1]}”，再进入后续步骤。` }
 function navigate(to: Page) {
+  if (!routeAllowed(to)) { toast(blockedHint()); return }
   location.hash = to
   if (page === to) render()
   if (!previewFrom) window.scrollTo(0, 0)
@@ -164,6 +187,7 @@ const paths: Record<string, string> = {
   home: 'M3 10 12 3l9 7v10H3V10m6 10v-7h6v7',
   chat: 'M4 4h16v12H9l-5 4V4m4 4h8m-8 4h5',
   list: 'M8 5h12M8 12h12M8 19h12M3 5h1m-1 7h1m-1 7h1',
+  lock: 'M6 10h12v11H6zM8 10V6a4 4 0 0 1 8 0v4',
   compare: 'M4 4h6v16H4zM14 4h6v16h-6z',
   cube: 'm12 2 9 5v10l-9 5-9-5V7l9-5m0 10 9-5M3 7l9 5v10',
   clock: 'M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
@@ -203,7 +227,8 @@ const navs: [Page, string, string][] = [
   ['planning', '空间选择', 'cube'],
   ['clarify', '需求共创', 'chat'],
   ['requirements', '我的需求', 'list'],
-  ['compare', '方案比对', 'compare'],
+  ['compare', '方案对比', 'compare'],
+  ['assessment', '风险评估', 'check'],
   ['space', '空间预览', 'cube'],
   ['records', '确认记录', 'clock'],
 ]
@@ -255,6 +280,22 @@ function taskStage() {
       : '等待定义第一条需求'
 }
 
+function flowNavigation(home = false) {
+  return navs.map(([id, text, glyph]) => {
+    const locked = !routeAllowed(id)
+    const index = projectSteps.indexOf(id as ProjectStep)
+    const complete = index >= 0 && (index < furthestUnlocked - 1 || !!state.selection)
+    const body = `${home ? icon(locked ? 'lock' : glyph, 18) : `<span class="flow-step-number">${id === 'overview' ? icon('home', 17) : id === 'assessment' ? icon(locked ? 'lock' : 'check', 16) : locked ? icon('lock', 14) : complete ? icon('check', 16) : index + 1}</span>`}<span>${text}${home ? '' : `<small>${locked ? '待解锁' : page === id ? '当前页面' : id === 'assessment' ? '随时检查' : complete ? '可回看' : '可继续'}</small>`}</span>`
+    return locked ? `<button class="${home ? 'home-locked-link' : 'nav-item is-locked'}" disabled title="${esc(blockedHint())}">${body}</button>` : `<a href="#${id}" class="${home ? '' : `nav-item ${page === id ? 'active' : ''} ${complete ? 'is-complete' : ''}`}" ${page === id ? 'aria-current="page"' : ''}>${body}</a>`
+  }).join('')
+}
+function flowGuide() {
+  if (page === 'overview' || page === 'vendor' || page === 'assessment') return ''
+  const index = projectSteps.indexOf(page)
+  const completed = state.selection ? 6 : furthestUnlocked - 1
+  const previous = index > 0 ? projectSteps[index - 1] : 'overview'
+  return `<section class="project-progress" aria-label="项目进度"><div class="project-progress-top"><span>第 ${index + 1} / 6 步 · <b>${navs.find(n => n[0] === page)?.[1]}</b></span><span>已完成 ${completed} / 6 步</span></div><progress value="${completed}" max="6" aria-label="整体项目完成进度"></progress><div class="project-progress-guide"><p>${stepInstructions[page]}</p><a href="#${previous}">返回${index > 0 ? '上一步' : '首页'}</a></div></section>`
+}
 function shell(content: string) {
   if (page === 'overview') return content
   return html`<div class="lucid-app page-${page}${page === 'planning' ? ' planning-page' : ''}">
@@ -279,11 +320,11 @@ function shell(content: string) {
         </div>
       </div>
       <nav class="studio-navigation" aria-label="项目导航">
-        ${navs.map(([id, text, i]) => html`<a href="#${id}" class="nav-item ${page === id ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''}>${icon(i, 18)}<span>${text}</span>${id === 'compare' && state.feedback.length ? '<i class="nav-dot"></i>' : ''}</a>`).join('')}
+        ${flowNavigation()}
       </nav>
     </header>
     <main id="main-content" class="studio-main${page === 'planning' ? ' plan-main' : ''}">
-      ${content}
+      ${flowGuide()}${content}
     </main>
     <footer class="app-footer">
       <span>安居有数 · Dream Defined. Living Refined.</span>
@@ -305,14 +346,14 @@ function overview() {
       </a>
       <nav class="home-navigation" aria-label="快捷导航">
         <a href="#planning">空间规划</a>
-        <a href="#clarify">需求共创</a>
-        <a href="#compare">方案比对</a>
+        ${routeAllowed('clarify') ? '<a href="#clarify">需求共创</a>' : '<span class="home-nav-locked" aria-disabled="true">需求共创</span>'}
+        ${routeAllowed('compare') ? '<a href="#compare">方案对比</a>' : '<span class="home-nav-locked" aria-disabled="true">方案对比</span>'}
       </nav>
       <details class="home-menu">
         <summary>项目工作台${icon('plus', 16)}</summary>
         <div class="home-menu-panel">
           <nav aria-label="项目导航">
-            ${navs.map(([id, text, i]) => html`<a href="#${id}" ${id === 'overview' ? 'aria-current="page"' : ''}>${icon(i, 18)}${text}</a>`).join('')}
+            ${flowNavigation(true)}
           </nav>
           <div class="home-menu-tools">
             ${btn(`${icon('export', 17)}导出项目`, 'export', 'home-menu-tool')}
@@ -451,14 +492,13 @@ const questions: {
   },
 ]
 function clarify() {
-  return html`${heading('把生活想法，变成清楚的需求', '先表达，再拆分与追问；全局、区域、公共项和待确认事项一起整理。')}${intakeWithSpaceMarkup(planning.model())}`
+  return html`${heading('一步一步，说清你想要的家。', '按问卷填写即可。不懂的专业问题可以先留待确认。')}${intakeWithSpaceMarkup(planning.model())}`
 }
 function requirements() {
   if (!state.requirements.length) return html`<div class="hub-root" data-variant="lucid">
     ${heading('我的需求', '把改造要求、项目背景和待确认信息放在一起。')}
     ${emptyPanel('先把想法整理成需求', '从一句生活化描述开始，AI 会拆分范围并补问缺少的信息。', 'go-clarify', '开始需求共创')}
-    ${renderProjectContext(projectContext())}
-    ${renderLegacyArchive(scales, ownerDimensions, merchantDimensions)}
+    <details class="requirements-extras"><summary>项目背景与补充记录</summary>${renderProjectContext(projectContext())}${renderLegacyArchive(scales, ownerDimensions, merchantDimensions)}</details>
   </div>`
   const snap = latest()
   return html`<div class="hub-root" data-variant="lucid">${heading('我的需求', '逐项检查描述与重要程度，确认后让商家围绕同一份需求回应。', btn(`${icon('plus', 16)}补充需求`, 'add-requirement', 'secondary-button'))}
@@ -472,13 +512,13 @@ function requirements() {
         >
       </div>
       <div>
-        ${snap ? btn('查看版本', 'history', 'text-button') : ''}${projectContextChanged(projectContext(), state.intakeDocument) && (state.dirty || !snap) ? btn('先更新需求草稿', 'go-clarify') : btn(state.dirty || !snap ? '确认并发布需求' : '前往方案比对', state.dirty || !snap ? 'publish' : 'go-compare')}
+        ${btn('查看风险评估', 'assessment-open', 'secondary-button', 'data-target="draft"')}${snap ? btn('查看版本', 'history', 'text-button') : ''}${projectContextChanged(projectContext(), state.intakeDocument) && (state.dirty || !snap) ? btn('先更新需求草稿', 'go-clarify') : btn(state.dirty || !snap ? '提交需求，等待方案' : '查看商家方案', state.dirty || !snap ? 'publish' : 'go-compare')}
       </div>
     </div>
     <div class="notice">
       ${icon('info', 18)}设备尺寸与现场接口可以留待核实。发布代表开始方案协作，不代表施工条件已经确定。
     </div>
-    ${projectContextChanged(projectContext(), state.intakeDocument) ? '<div class="notice warn">项目背景已改变或与原梳理记录不同。请重新整理并采用草稿后再发布新版本；原发布版本保持不变，仍可用于方案比对。</div>' : ''}
+    ${projectContextChanged(projectContext(), state.intakeDocument) ? '<div class="notice warn">项目背景已改变或与原梳理记录不同。请重新整理并采用草稿后再发布新版本；原发布版本保持不变，仍可用于方案对比。</div>' : ''}
     <div class="hub-workspace">
     <section class="requirement-list">
       ${state.requirements
@@ -514,15 +554,28 @@ function requirements() {
     ${renderRequirementsOverview(state.requirements, state.intakeDocument, projectContext())}
     </div>
     <p class="end-note">原始表达：${esc(state.brief || '完整演示案例')}</p>
-    ${renderProjectContext(projectContext())}
-    ${renderLegacyArchive(scales, ownerDimensions, merchantDimensions)}
+    <details class="requirements-extras"><summary>项目背景与补充记录</summary>${renderProjectContext(projectContext())}${renderLegacyArchive(scales, ownerDimensions, merchantDimensions)}</details>
   </div>`
+}
+function renderMerchantWaiting() {
+  const snap = latest()!
+  return `<section class="merchant-waiting" role="status"><span class="merchant-waiting-symbol">${icon('clock', 30)}</span><div><h2>商家正在制作</h2><p>需求 R${snap.version} · ${snap.requirements.length} 条需求已就绪</p><ol><li>${icon('check', 16)}需求已提交</li><li aria-current="step">正在整理方案</li><li>完成后查看对比</li></ol><small>当前为演示流程，未发送给真实商家。下方预制方案可立即查看。</small></div></section>`
+}
+function renderProposalSamples() {
+  const snap = latest()!
+  const selected = proposalSamples.find(sample => sample.id === samplePreview)
+  const p = selected && currentProposal(selected.id)
+  return `<section class="proposal-samples" aria-labelledby="proposal-samples-title"><div class="proposal-samples-heading"><div><h2 id="proposal-samples-title">先看看方案会是什么样</h2><p>预制演示方案 · 点击立即展示，效果图仅作风格参考。</p></div>${btn('同时展示两份方案', 'seed', 'text-button')}</div><div class="proposal-sample-grid">${proposalSamples.map(sample => {
+    const available = currentProposal(sample.id)?.requirementVersion === snap.version
+    return `<button class="proposal-sample ${samplePreview === sample.id ? 'is-selected' : ''}" data-action="show-sample" data-id="${sample.id}" aria-pressed="${samplePreview === sample.id}"><img src="/assets/${sample.image}" alt="${sample.title}风格示意" loading="lazy"/><span class="proposal-sample-copy"><small>${sample.name} · 演示方案</small><strong>${sample.title}</strong><span>${sample.description}</span><b>${available ? '查看这份方案' : '点击展示方案'} ${icon('arrow', 18)}</b></span></button>`
+  }).join('')}</div>
+  ${selected && p ? `<article class="sample-proposal-detail" id="sample-proposal-detail" tabindex="-1"><div class="sample-detail-heading"><div><h2>${selected.title}</h2><p>${selected.name} · 演示 V${p.version} · 对应需求 R${p.requirementVersion}</p></div>${btn('查看并选择此方案', 'select-proposal', 'primary', `data-id="${esc(p.id)}" ${p.requirementVersion !== snap.version ? 'disabled' : ''}`)}</div><p>${selected.description}</p><ul class="sample-highlights">${selected.highlights.map(highlight => `<li>${icon('check', 16)}${highlight}</li>`).join('')}</ul><details open><summary>如何回应你的 ${p.items.length} 条需求</summary><dl>${p.items.map(item => `<div><dt>${esc(snap.requirements.find(r => r.id === item.requirementId)?.title || item.requirementId)}</dt><dd>${esc(item.text)}</dd></div>`).join('')}</dl></details><a class="sample-comparison-link" href="#proposal-comparison" data-action="scroll-comparison">下方逐项对照两份方案 ${icon('arrow', 16)}</a></article>` : ''}</section>`
 }
 function compare() {
   const snap = latest()
   if (!snap)
     return (
-      heading('方案比对', '用同一份需求，看清两家方案的回应。') +
+      heading('方案对比', '用同一份需求，看清两家方案的回应。') +
       emptyPanel(
         '还没有发布需求',
         '先确认需求清单，商家才能据此提供方案。',
@@ -531,17 +584,9 @@ function compare() {
       )
     )
   const ps = (['a', 'b'] as const).map(currentProposal)
-  if (ps.every((p) => !p))
-    return (
-      heading('方案比对', `当前需求基准 R${snap.version}`) +
-      emptyPanel(
-        '准备好接收方案了',
-        '可以先载入两家模拟商家的方案，体验核对与修订。',
-        'seed',
-        '载入演示商家方案',
-      ) +
-      btn('自行提交商家方案', 'go-vendor', 'secondary-button')
-    )
+  const hasCurrent = ps.some(p => p?.requirementVersion === snap.version)
+  const samples = renderProposalSamples()
+  if (ps.every(p => !p)) return `${heading('需求已提交，接下来看看方案。', '方案会围绕你的清单逐项回应。你可以先体验预制示例。')}${renderMerchantWaiting()}${samples}`
   const data = ps.map(
     (p, i) =>
       p ??
@@ -563,15 +608,15 @@ function compare() {
       stale ||
       fs.some((f) => f.find((x) => x.requirementId === r.id)?.status !== 'responded'),
   )
-  return html`${heading('每一份方案，如何回应你', '相同的需求基准，让差异清楚可见。', btn(`${icon('edit', 16)}商家提交 / 修订`, 'go-vendor', 'secondary-button'))}${state.dirty ? '<p class="notice warn">你有尚未发布的需求修改。当前仍按已发布版本比较。</p>' : ''}${stale ? `<div class="notice warn">${icon('info', 18)}需求已更新到 R${snap.version}，商家方案还在引用旧版。${btn('按新需求重新提交', 'go-vendor', 'text-button')}</div>` : ''}
-    <div class="compare-toolbar">
+  return html`${heading('每一份方案，如何回应你', '相同的需求基准，让差异清楚可见。', btn(`${icon('edit', 16)}商家提交 / 修订`, 'go-vendor', 'secondary-button'))}${!hasCurrent ? renderMerchantWaiting() : ''}${samples}${state.dirty ? '<p class="notice warn">你有尚未发布的需求修改。当前仍按已发布版本比较。</p>' : ''}${stale ? `<div class="notice warn">${icon('info', 18)}需求已更新到 R${snap.version}，商家方案还在引用旧版。${btn('按新需求重新提交', 'go-vendor', 'text-button')}</div>` : ''}
+    <div class="compare-toolbar" id="proposal-comparison">
       <div class="segmented">
         <button data-filter="all" class="${filter === 'all' ? 'selected' : ''}">全部需求</button
         ><button data-filter="issues" class="${filter === 'issues' ? 'selected' : ''}">
           只看待处理
         </button>
       </div>
-      <span>需求基准 R${snap.version} · 规则辅助核对</span>
+      <span>需求基准 R${snap.version} · 规则辅助核对</span>${btn('查看风险评估', 'assessment-open', 'secondary-button', `data-target="requirements:${snap.version}"`)}
     </div>
     <p class="comparison-hint">${icon('arrow', 15)}左右滑动，对照两家方案的回应。</p>
     <div
@@ -638,13 +683,13 @@ function compare() {
         <tfoot>
           <tr>
             <td><small>回应完整不等于现场条件已确认。</small></td>
-            ${data.map((p) => html`<td><div class="button-stack flex flex-col gap-3">${btn('生成问题反馈', 'feedback', 'secondary-button', `data-id="${esc(p.id)}" ${!p.version ? 'disabled' : ''}`)}${btn('查看并选择此方案', 'select-proposal', 'primary', `data-id="${esc(p.id)}" ${p.requirementVersion !== snap.version || !p.version ? 'disabled' : ''}`)}</div></td>`).join('')}
+            ${data.map((p) => html`<td><div class="button-stack flex flex-col gap-3">${btn('评估这份方案', 'assessment-open', 'secondary-button', `data-target="proposal:${esc(p.id)}" ${!p.version ? 'disabled' : ''}`)}${btn('生成问题反馈', 'feedback', 'secondary-button', `data-id="${esc(p.id)}" ${!p.version ? 'disabled' : ''}`)}${btn('查看并选择此方案', 'select-proposal', 'primary', `data-id="${esc(p.id)}" ${p.requirementVersion !== snap.version || !p.version ? 'disabled' : ''}`)}</div></td>`).join('')}
           </tr>
         </tfoot>
       </table>
     </div>
     <div class="notice">
-      ${icon('info', 18)}核对只检查商家声明与已配置的需求条件。额外项目、工艺可行性和现场情况需要人工确认。${btn('查看空间关联', 'go-space', 'text-button')}
+      ${icon('info', 18)}核对只检查商家声明与已配置的需求条件。额外项目、工艺可行性和现场情况需要人工确认。${btn('下一步：空间预览', 'go-space', 'secondary-button')}
     </div>`
 }
 function merchantContextGuide() {
@@ -670,7 +715,7 @@ function vendor() {
           text: '',
         })),
     )
-  return html`${heading('商家方案工作区', '此处模拟商家操作；提交仅保留在本轮演示。', btn('返回方案比对', 'go-compare', 'secondary-button'))}
+  return html`${heading('商家方案工作区', '此处模拟商家操作；提交仅保留在本轮演示。', btn('返回方案对比', 'go-compare', 'secondary-button'))}
     <div class="document-toolbar">
       <div class="segmented">
         <button data-vendor="a" class="${vendorId === 'a' ? 'selected' : ''}">A · 木序设计</button
@@ -801,8 +846,62 @@ function roomDetail(name: string, area: number) {
     <h3 class="detail-heading">这个空间的需求</h3>
     ${reqs.length ? reqs.map((req) => html`<button class="space-req" data-action="space-req" data-id="${esc(req.id)}"><span>${esc(req.id)}</span><b>${esc(req.title)}</b>${icon('arrow', 14)}</button>`).join('') : '<p class="muted">首版主要梳理厨房需求。这个房间目前提供空间示意。</p>'}`
 }
+function assessmentTargets() {
+  return [
+    ...(state.requirements.length ? [{ key: 'draft', label: state.dirty || !latest() ? '当前需求草稿' : '当前需求清单' }] : []),
+    ...state.snapshots.slice().reverse().map(s => ({ key: `requirements:${s.version}`, label: `已发布需求 R${s.version}` })),
+    ...state.proposals.slice().reverse().map(p => ({ key: `proposal:${p.id}`, label: `${p.vendorName} V${p.version} · 需求 R${p.requirementVersion}${p.requirementVersion !== latest()?.version || currentProposal(p.vendorId)?.id !== p.id ? '（历史）' : ''}` })),
+  ]
+}
+function assessmentInput(key = assessmentTarget): AssessmentInput | undefined {
+  const proposal = key.startsWith('proposal:') ? state.proposals.find(p => `proposal:${p.id}` === key) : undefined
+  const snapshot = proposal ? state.snapshots.find(s => s.version === proposal.requirementVersion) : key.startsWith('requirements:') ? state.snapshots.find(s => `requirements:${s.version}` === key) : undefined
+  if (key !== 'draft' && !snapshot) return
+  const target = assessmentTargets().find(t => t.key === key)
+  if (!target) return
+  return { targetKey: key, targetLabel: target.label, requirementVersion: snapshot?.version ?? null, latestVersion: latest()?.version ?? null,
+    requirements: snapshot?.requirements ?? state.requirements, proposal, latestProposalId: proposal ? currentProposal(proposal.vendorId)?.id : undefined, document: snapshot?.intakeDocument ?? (key === 'draft' ? state.intakeDocument : undefined),
+    context: snapshot?.projectContext ?? (key === 'draft' ? projectContext() : undefined),
+    contextChanged: key === 'draft' && projectContextChanged(projectContext(), state.intakeDocument),
+    responses: proposal ? findings(proposal) : [], notes: state.assessmentNotes }
+}
+function runAssessment(key = assessmentTarget) {
+  const input = assessmentInput(key)
+  if (!input) return
+  const run = evaluateAssessment(input)
+  state.assessments.push(run)
+  return run
+}
+function openAssessment(key = 'draft') {
+  assessmentTarget = key
+  assessmentFilter = 'all'
+  navigate('assessment')
+}
+function assessment() {
+  const targets = assessmentTargets()
+  if (!targets.length) return heading('风险评估', '从需求与方案中找出需要处理的问题。') + emptyPanel('先形成一份需求清单', '完成需求共创后，即可在这里检查信息缺口与待核实事项。', 'go-clarify', '前往需求共创')
+  if (!targets.some(t => t.key === assessmentTarget)) assessmentTarget = targets[0].key
+  const input = assessmentInput()!
+  const run = state.assessments.slice().reverse().find(r => r.targetKey === assessmentTarget) ?? runAssessment()!
+  return heading('风险评估', '看清依据，处理问题，再做下一步决定。') + renderAssessment(run, {
+    targets, stale: assessmentIsStale(run, input), filter: assessmentFilter,
+    canSelect: !!input.proposal && input.proposal.id === input.latestProposalId && input.requirementVersion === latest()?.version,
+    isDraft: assessmentTarget === 'draft',
+  })
+}
+function requireAssessment(action: 'publish' | 'select', key: string) {
+  const run = runAssessment(key)
+  if (!run) return
+  if (blockedIssues(run, action).length) {
+    dialog.close()
+    openAssessment(key)
+    toast('请先处理影响此次确认的问题。')
+    return
+  }
+  return run
+}
 function records() {
-  return html`${heading('把每次决定，留在这里', '已发布的需求、商家修订和你的最终选择都有记录。', btn(`${icon('export', 16)}导出项目`, 'export', 'secondary-button'))}${state.selection ? `<section class="selection-record"><span class="large-check">${icon('check', 27)}</span><div><h2>已选定 ${esc(state.selection.proposal.vendorName)}</h2><p>需求 R${state.selection.requirements.version} · 方案 V${state.selection.proposal.version} · ${stamp(state.selection.at)}</p><span class="status partial">${state.selection.pending.length ? '仍有 ' + state.selection.pending.length + ' 项待办' : '已记录本次选择'}</span>${latest()?.version !== state.selection.requirements.version ? '<p class="notice warn">当前需求已更新，本记录保留的是历史选择。</p>' : ''}</div>${btn('查看确认内容', 'selection-detail', 'secondary-button')}</section>` : emptyPanel('还没有选定方案', '先比较两家商家的回应，再做出适合你的选择。', 'go-compare', '前往方案比对')}
+  return html`${heading('把每次决定，留在这里', '已发布的需求、商家修订和你的最终选择都有记录。', btn(`${icon('export', 16)}导出项目`, 'export', 'secondary-button'))}${state.selection ? `<section class="selection-record"><span class="large-check">${icon('check', 27)}</span><div><h2>已选定 ${esc(state.selection.proposal.vendorName)}</h2><p>需求 R${state.selection.requirements.version} · 方案 V${state.selection.proposal.version} · ${stamp(state.selection.at)}</p><span class="status partial">${state.selection.pending.length ? '仍有 ' + state.selection.pending.length + ' 项待办' : '已记录本次选择'}</span>${latest()?.version !== state.selection.requirements.version ? '<p class="notice warn">当前需求已更新，本记录保留的是历史选择。</p>' : ''}</div>${btn('查看确认内容', 'selection-detail', 'secondary-button')}</section>` : emptyPanel('还没有选定方案', '先比较两家商家的回应，再做出适合你的选择。', 'go-compare', '前往方案对比')}
     <div class="records-grid">
       <section>
         <div class="section-title">
@@ -857,6 +956,12 @@ function records() {
 
 
 function render() {
+  syncFlow()
+  if (!canVisit(page, furthestUnlocked)) {
+    page = projectSteps[furthestUnlocked - 1]
+    history.replaceState(null, '', `#${page}`)
+    toast(blockedHint())
+  }
   disposeEngineering?.()
   disposeEngineering = undefined
   if (page !== 'planning') { homeArrival?.dispose(); homeArrival = undefined }
@@ -869,9 +974,12 @@ function render() {
   intakeSession = undefined
   house?.dispose()
   house = undefined
-  const pages = { overview, planning: planning.render, clarify, requirements, compare, space, records, vendor }
+  const pages = { overview, planning: planning.render, clarify, requirements, compare, assessment, space, records, vendor }
   if (!(page in pages)) page = 'overview'
   app.innerHTML = shell(pages[page]())
+  for (const button of app.querySelectorAll<HTMLButtonElement>('button[data-action^="go-"]')) {
+    if (!routeAllowed(button.dataset.action!.slice(3))) { button.disabled = true; button.title = blockedHint() }
+  }
   if (page === 'overview') disposeHome = mountHomeScene(document.querySelector<HTMLElement>('.home-page')!, (keyboard, frame) => {
     homeArrival?.dispose()
     homeArrival = frame ? createHomeArrival(frame) : undefined
@@ -894,7 +1002,7 @@ function render() {
     const area = planningEntry
     planningEntry = undefined
     intakeSession = mountIntake(document.querySelector<HTMLElement>('#intake-root')!, {
-      variant: 'lucid', initialBrief: state.brief, existingCount: state.requirements.length,
+      variant: 'lucid', questionnaire: true, initialBrief: state.brief, existingCount: state.requirements.length,
       projectContext: contextAnswers(projectContext()),
       planningArea: area,
       storage: demoIntakeStorage,
@@ -994,6 +1102,15 @@ function download(name: string, body: string, type: string) {
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+function showProposalSelection(p: Proposal) {
+      const pending = selectionPending(p)
+      showDialog(
+        '查看选择与剩余待办',
+        `<p>你准备选定 <b>${esc(p.vendorName)} V${p.version}</b>，对应需求 R${p.requirementVersion}。</p><h3>保留在确认记录中的待办</h3><ul>${pending.map((t) => html`<li>${esc(t)}</li>`).join('') || '<li>本轮规则检查无未决项，现场实施仍需专业确认。</li>'}</ul><p class="muted">本次选择不会把待办标记为已解决，也不代表施工验收。</p>`,
+        btn('暂不选择', 'close-dialog', 'secondary-button') + btn('先查看风险评估', 'assessment-dialog', 'secondary-button', `data-id="${esc(p.id)}"`) +
+          btn('确认选定并保留待办', 'confirm-selection', 'primary', `data-id="${esc(p.id)}"`),
+      )
+}
 function selectionPending(p: Proposal) {
   const s = state.snapshots.find((s) => s.version === p.requirementVersion)!
   return [
@@ -1006,9 +1123,18 @@ function selectionPending(p: Proposal) {
   ]
 }
 document.addEventListener('click', (e) => {
+  const anchor = (e.target as Element).closest<HTMLAnchorElement>('a[href^="#"]')
+  const destination = anchor?.getAttribute('href')?.slice(1)
+  if (destination && (projectSteps.includes(destination as ProjectStep) || destination === 'vendor' || destination === 'assessment') && !routeAllowed(destination)) { e.preventDefault(); toast(blockedHint()); return }
   const target = (e.target as HTMLElement).closest<HTMLElement>('button,a[data-action]')
   if (!target) return
   const action = target.dataset.action
+  if (target.dataset.assessmentFilter) {
+    assessmentFilter = target.dataset.assessmentFilter as Dimension | 'all'
+    render()
+    document.querySelector<HTMLElement>('#assessment-issues')?.focus({ preventScroll: true })
+    return
+  }
   if (target.dataset.filter) {
     filter = target.dataset.filter
     render()
@@ -1042,6 +1168,47 @@ document.addEventListener('click', (e) => {
   }
   const id = target.dataset.id
   switch (action) {
+    case 'assessment-dialog': dialog.close(); openAssessment(`proposal:${id}`); break
+    case 'assessment-open': openAssessment(target.dataset.target || 'draft'); break
+    case 'assessment-first':
+      e.preventDefault(); assessmentFilter = 'all'; render(); document.querySelector<HTMLElement>('#assessment-issues')?.focus(); break
+    case 'assessment-run':
+      runAssessment(); log('重新评估当前需求与方案，保留原评估记录'); render(); toast('评估已更新。'); break
+    case 'assessment-export': {
+      const input = assessmentInput()
+      const run = state.assessments.slice().reverse().find(r => r.targetKey === assessmentTarget)
+      if (!input || !run) break
+      download('安居有数风险评估.json', JSON.stringify({ exportedAt: now(), stale: assessmentIsStale(run, input), assessment: run }, null, 2), 'application/json')
+      break
+    }
+    case 'assessment-select': {
+      const input = assessmentInput()
+      if (!input?.proposal) break
+      const proposal = state.proposals.find(p => p.id === input.proposal!.id)
+      if (proposal) showProposalSelection(proposal)
+      break
+    }
+    case 'assessment-source':
+    case 'assessment-edit': {
+      const input = assessmentInput()
+      const run = state.assessments.slice().reverse().find(r => r.targetKey === assessmentTarget)
+      const issue = run?.issues.find(i => i.id === id)
+      if (!input || !run || !issue) break
+      const req = input.requirements.find(r => issue.requirementIds.includes(r.id))
+      if (action === 'assessment-source') {
+        showDialog(req ? `${esc(req.id)} · ${esc(req.title)}` : '本次评估的项目资料', `<p>${esc(input.targetLabel)}</p><p>${esc(req?.description || JSON.stringify(input.context || {}))}</p><p class="muted">此处为评估所引用的原文。修改请回到对应需求或商家方案。</p>`, btn('关闭', 'close-dialog'))
+      } else if (input.proposal) {
+        const proposal = state.proposals.find(p => p.id === input.proposal!.id)!
+        vendorId = proposal.vendorId; draftItems = []; navigate('vendor')
+        requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-proposal-text="${CSS.escape(req?.id || '')}"]`)?.focus())
+      } else if (req?.intake || !req || input.targetKey !== 'draft') {
+        if (input.targetKey !== 'draft') toast('历史版本保持不变，请在当前需求中创建修订。')
+        navigate('requirements')
+        if (req?.intake) { intakeEntry = { focus: true }; navigate('clarify') }
+      } else requirementForm(req.id)
+      break
+    }
+    case 'scroll-comparison': e.preventDefault(); document.querySelector('#proposal-comparison')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); break
     case 'space-engineering':
     case 'space-rooms':
       spaceMode = action === 'space-engineering' ? 'engineering' : 'rooms'
@@ -1049,6 +1216,7 @@ document.addEventListener('click', (e) => {
       break
     case 'plan-current-room':
     case 'plan-whole-home':
+      planningChosen = true
       previewFrom = captureFloorplanHandoff()
       planningEntry = action === 'plan-current-room' ? planning.selectedRoom()?.name : null
       navigate('clarify')
@@ -1138,6 +1306,7 @@ document.addEventListener('click', (e) => {
       planning.reset()
       intakeDraft = null
       state = empty()
+      planningChosen = false; furthestUnlocked = 1; samplePreview = null
       vendorDrafts = {}
       scales = {}
       dialog.close()
@@ -1182,24 +1351,47 @@ document.addEventListener('click', (e) => {
       break
     case 'confirm-publish': {
       if (projectContextChanged(projectContext(), state.intakeDocument)) { dialog.close(); toast('项目背景已改变，请先重新整理并采用草稿。'); navigate('clarify'); break }
+      const assessment = requireAssessment('publish', 'draft')
+      if (!assessment) break
       const version = (latest()?.version || 0) + 1
-      state.snapshots.push({ version, requirements: clone(state.requirements), at: now(), projectContext: clone(projectContext()), ...(state.intakeDocument ? { intakeDocument: clone(state.intakeDocument) } : {}) })
+      state.snapshots.push({ version, requirements: clone(state.requirements), at: now(), assessment: clone(assessment), projectContext: clone(projectContext()), ...(state.intakeDocument ? { intakeDocument: clone(state.intakeDocument) } : {}) })
+      state.assessmentNotes.push(...assessment.notes.map(note => ({ ...clone(note), targetKey: `requirements:${version}` })))
+      latest()!.assessment = clone(runAssessment(`requirements:${version}`)!)
       state.dirty = false
       log(`发布需求 R${version}，共 ${state.requirements.length} 条`)
       dialog.close()
-      render()
-      toast(`需求 R${version} 已发布`)
+      samplePreview = null
+      navigate('compare')
+      toast(`需求 R${version} 已提交，可查看方案制作状态`)
       break
     }
-    case 'seed':
-      state.proposals.push(
-        ...seedProposals(latest()!.requirements, latest()!.version).filter(
-          (p) => !currentProposal(p.vendorId),
-        ),
-      )
-      log('载入两家模拟商家的初版方案')
+    case 'show-sample': {
+      const snapshot = latest()
+      if (!snapshot || !['a', 'b'].includes(id || '')) break
+      const sampleId = id as 'a' | 'b'
+      const existing = currentProposal(sampleId)
+      if (!existing || existing.requirementVersion !== snapshot.version) {
+        state.proposals.push(createSampleProposal(snapshot.requirements, snapshot.version, sampleId, existing))
+        log(`查看${sampleId === 'a' ? '木序设计' : '栖居营造'}的预制演示方案（R${snapshot.version}）`)
+      }
+      samplePreview = sampleId
+      render()
+      const detail = document.querySelector<HTMLElement>('#sample-proposal-detail')
+      detail?.focus({ preventScroll: true })
+      detail?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
+      break
+    }
+    case 'seed': {
+      const snapshot = latest()
+      if (!snapshot) break
+      for (const vendor of ['a', 'b'] as const) {
+        const previous = currentProposal(vendor)
+        if (!previous || previous.requirementVersion !== snapshot.version) state.proposals.push(createSampleProposal(snapshot.requirements, snapshot.version, vendor, previous))
+      }
+      log('查看两家预制演示方案')
       render()
       break
+    }
     case 'history':
       showDialog(
         '需求与方案版本',
@@ -1231,7 +1423,7 @@ document.addEventListener('click', (e) => {
               html`<h3>${esc(r.id)} · ${esc(r.title)}</h3>
                 <p>${esc(r.description)}</p>`,
           )
-          .join(''),
+          .join('') + (s.assessment ? renderAssessmentArchive(s.assessment) : '<p>此历史版本未保存风险评估。</p>'),
       )
       break
     }
@@ -1273,7 +1465,7 @@ document.addEventListener('click', (e) => {
       const p = state.proposals.find((p) => p.id === id)!
       if (!state.feedback.some((x) => x.proposalId === p.id)) {
         state.feedback.push({
-          id: crypto.randomUUID(),
+          id: localRecordId(),
           proposalId: p.id,
           version: p.version,
           items: findings(p)
@@ -1334,7 +1526,7 @@ document.addEventListener('click', (e) => {
       }
       const prior = currentProposal(vendorId)
       const p: Proposal = {
-        id: crypto.randomUUID(),
+        id: localRecordId(),
         vendorId,
         vendorName: vendorId === 'a' ? '木序设计' : '栖居营造',
         version: (prior?.version || 0) + 1,
@@ -1351,14 +1543,8 @@ document.addEventListener('click', (e) => {
       break
     }
     case 'select-proposal': {
-      const p = state.proposals.find((p) => p.id === id)!
-      const pending = selectionPending(p)
-      showDialog(
-        '查看选择与剩余待办',
-        `<p>你准备选定 <b>${esc(p.vendorName)} V${p.version}</b>，对应需求 R${p.requirementVersion}。</p><h3>保留在确认记录中的待办</h3><ul>${pending.map((t) => html`<li>${esc(t)}</li>`).join('') || '<li>本轮规则检查无未决项，现场实施仍需专业确认。</li>'}</ul><p class="muted">本次选择不会把待办标记为已解决，也不代表施工验收。</p>`,
-        btn('暂不选择', 'close-dialog', 'secondary-button') +
-          btn('确认选定并保留待办', 'confirm-selection', 'primary', `data-id="${esc(p.id)}"`),
-      )
+      const p = state.proposals.find(p => p.id === id)
+      if (p) showProposalSelection(p)
       break
     }
     case 'confirm-selection': {
@@ -1367,7 +1553,10 @@ document.addEventListener('click', (e) => {
         toast('需求版本已变更，请重新核对。')
         break
       }
+      const assessment = requireAssessment('select', `proposal:${p.id}`)
+      if (!assessment) break
       state.selection = {
+        assessment: clone(assessment),
         proposal: clone(p),
         requirements: clone(latest()!),
         at: now(),
@@ -1382,7 +1571,7 @@ document.addEventListener('click', (e) => {
       const s = state.selection!
       showDialog(
         '本次选择记录',
-        `<p>${esc(s.proposal.vendorName)} · V${s.proposal.version} · R${s.requirements.version}</p><ul>${s.pending.map((p) => html`<li>${esc(p)}</li>`).join('') || '<li>没有记录待办</li>'}</ul><p>${stamp(s.at)}</p>`,
+        `<p>${esc(s.proposal.vendorName)} · V${s.proposal.version} · R${s.requirements.version}</p><ul>${s.pending.map((p) => html`<li>${esc(p)}</li>`).join('') || '<li>没有记录待办</li>'}</ul><p>${stamp(s.at)}</p>${s.assessment ? renderAssessmentArchive(s.assessment) : '<p>此历史记录未保存风险评估。</p>'}`,
       )
       break
     }
@@ -1478,6 +1667,7 @@ document.addEventListener('input', (e) => {
 })
 document.addEventListener('change', async (e) => {
   const input = e.target as HTMLInputElement
+  if (input.id === 'assessment-target') { assessmentTarget = input.value; assessmentFilter = 'all'; render(); return }
   if (input.name === 'answer') {
     const q = questions[state.question]
     if (q.multi) {
@@ -1536,6 +1726,24 @@ document.addEventListener('change', async (e) => {
 })
 document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement
+  if (form.dataset.assessmentNote) {
+    e.preventDefault()
+    const input = assessmentInput()
+    const run = state.assessments.slice().reverse().find(r => r.targetKey === assessmentTarget)
+    const issue = run?.issues.find(i => i.id === form.dataset.assessmentNote)
+    if (!input || !run || !issue || assessmentIsStale(run, input)) { toast('资料已变化，请先重新评估。'); return }
+    const data = new FormData(form)
+    const text = String(data.get('note') || '').trim()
+    const owner = String(data.get('owner') || '')
+    if (!text || text.length > 1200 || !assessmentOwners.includes(owner)) { toast('请选择责任人，并填写 1–1200 字的资料或安排。'); return }
+    state.assessmentNotes = state.assessmentNotes.filter(n => !(n.targetKey === assessmentTarget && n.issueId === issue.id))
+    state.assessmentNotes.push({ targetKey: assessmentTarget, issueId: issue.id, fingerprint: issue.fingerprint, owner, text, at: now() })
+    runAssessment(); log(`记录评估事项的处理安排：${issue.title}`); render()
+    const row = document.getElementById(`risk-${issue.id}`)
+    row?.setAttribute('tabindex', '-1'); row?.focus({ preventScroll: true })
+    toast('安排已保存，核验状态仍保留。')
+    return
+  }
   if (form.id === 'project-context-form') {
     e.preventDefault()
     const values = new FormData(form)
@@ -1598,7 +1806,8 @@ function demo() {
   }
   state.requirements = buildRequirements(state.brief, state.answers)
   state.snapshots = [{ version: 1, requirements: clone(state.requirements), at: now() }]
-  state.proposals = seedProposals(state.requirements, 1)
+  state.proposals = []
+  samplePreview = null
   state.question = 4
   log('载入完整厨房演示：需求 R1 与两家初版方案')
   navigate('compare')

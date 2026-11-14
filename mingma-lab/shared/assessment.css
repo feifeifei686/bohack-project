@@ -1,0 +1,64 @@
+.assessment-root { color: #37363e; }
+.assessment-root h2 { font-size: 1.25rem; margin: 0; }
+.assessment-root h3 { font-size: 1.08rem; line-height: 1.65; margin: 10px 0; }
+.assessment-root p { line-height: 1.8; max-width: 72ch; }
+.assessment-toolbar, .assessment-toolbar > div { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.assessment-toolbar { justify-content: space-between; margin: 0 0 24px; }
+.assessment-toolbar label { display: grid; gap: 8px; font-weight: 600; flex: 1; max-width: 520px; }
+.assessment-root select, .assessment-root textarea { width: 100%; min-height: 44px; color: #37363e; background: #fffefa; border: 1px solid #c5bdcc; border-radius: 8px; padding: 10px 12px; font: inherit; caret-color: #575674; }
+.assessment-summary { display: flex; align-items: center; justify-content: space-between; gap: 24px; background: #efedf5; border-radius: 14px; padding: 24px; margin-bottom: 32px; }
+.assessment-summary p { margin: 8px 0 0; color: #595363; }
+.assessment-summary.is-blocked { background: #f9eee9; }
+.assessment-summary.is-stale { background: #f7f0df; }
+.assessment-summary > button, .assessment-summary > a { flex-shrink: 0; }
+.assessment-link { display: inline-flex; text-decoration: none; }
+.assessment-workspace { display: grid; grid-template-columns: minmax(240px, 290px) minmax(0, 1fr); gap: 36px; align-items: start; }
+.assessment-dimensions > p, .assessment-method p, .assessment-session-note { color: #625b6d; font-size: 13px; }
+.assessment-dimensions ul { list-style: none; margin: 8px 0 20px; padding: 0; }
+.assessment-all, .assessment-dimension { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 12px; border: 0; border-bottom: 1px solid #ded8e3; background: transparent; border-radius: 0; text-align: left; color: inherit; cursor: pointer; min-height: 52px; }
+.assessment-all.is-active, .assessment-dimension.is-active { background: #e9e5f0; border-radius: 8px; }
+.assessment-all:hover, .assessment-dimension:hover { background: #f1edf5; }
+.risk-status { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.risk-low { color: #285444; background: #e5f0e9; }
+.risk-medium { color: #754e16; background: #f7ecd4; }
+.risk-high { color: #943c32; background: #f7e5e0; }
+.risk-pending, .risk-na { color: #5c5665; background: #eeebf1; }
+.assessment-method, .assessment-resolution, .assessment-evidence { font-size: 14px; }
+.assessment-root summary { min-height: 44px; padding: 12px 0; cursor: pointer; color: #51496d; font-weight: 600; }
+.assessment-root a { text-underline-offset: 4px; }
+.assessment-issue-heading { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #d9d3df; }
+.assessment-issue-heading > span { color: #625b6d; font-size: 14px; }
+.assessment-issue { padding: 24px 0; border-bottom: 1px solid #d9d3df; overflow-wrap: anywhere; scroll-margin-top: 160px; }
+.assessment-issue-meta { display: flex; justify-content: space-between; gap: 10px; align-items: center; color: #625b6d; font-size: 13px; }
+.assessment-issue > p { margin: 0 0 18px; color: #625b6d; }
+.assessment-issue dl { margin: 0; font-size: 14px; }
+.assessment-issue dl > div { display: grid; grid-template-columns: 65px minmax(0, 1fr); gap: 12px; margin: 10px 0; line-height: 1.7; }
+.assessment-issue dt { color: #625b6d; }
+.assessment-issue dd { margin: 0; }
+.assessment-evidence p { white-space: pre-wrap; padding: 12px; background: #f1eef4; border-radius: 8px; margin: 0 0 12px; }
+.assessment-note { background: #f1eef4; padding: 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; }
+.assessment-note p { margin: 6px 0; white-space: pre-wrap; }
+.assessment-note small { color: #625b6d; }
+.assessment-issue-actions { display: flex; flex-wrap: wrap; gap: 16px; }
+.assessment-issue-actions button { min-height: 44px; }
+.assessment-resolution form { display: grid; gap: 14px; padding-top: 6px; }
+.assessment-resolution label { display: grid; gap: 8px; }
+.assessment-resolution form > p { margin: 0; font-size: 13px; color: #625b6d; }
+.assessment-resolution form > button { justify-self: start; }
+.assessment-empty { padding: 36px 0; color: #625b6d; }
+.assessment-dimension-detail { color: #625b6d; font-size: 14px; }
+.assessment-session-note { margin-top: 32px; }
+.assessment-archive { border-top: 1px solid #ded8e3; margin-top: 24px; padding-top: 16px; }
+.assessment-archive ul { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.assessment-root :focus-visible { outline: 3px solid #71638c; outline-offset: 3px; }
+.assessment-root ::selection { color: #292337; background: #ded5ed; }
+.assessment-root button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 760px) {
+  .assessment-workspace { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .assessment-dimensions ul { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 12px; }
+  .assessment-dimension { padding: 12px 4px; gap: 5px; font-size: 13px; }
+  .assessment-dimension .risk-status { font-size: 11px; padding: 3px 5px; }
+  .assessment-summary { flex-direction: column; align-items: start; padding: 20px; gap: 16px; }
+  .assessment-toolbar label { max-width: none; flex-basis: 100%; min-width: 0; }
+  .assessment-archive ul { grid-template-columns: 1fr; }
+}
