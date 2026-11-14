@@ -14,6 +14,7 @@
 .has-workflow-dock.page-vendor .sticky-actions {
   display: none;
 }
+.has-workflow-dock .intake-external-navigation .preference-actions,
 .has-workflow-dock .intake-external-navigation [data-intake-action='start'],
 .has-workflow-dock .intake-external-navigation [data-intake-action='answer'],
 .has-workflow-dock .intake-external-navigation [data-intake-action='review-confirm'],

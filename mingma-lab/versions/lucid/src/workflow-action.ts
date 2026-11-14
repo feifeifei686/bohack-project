@@ -15,7 +15,7 @@ export type WorkflowFacts = {
   currentSelection: boolean
   choosingProposal: boolean
 }
-export type WorkflowAction = 'generate' | 'wait-planning' | 'need-rooms' | 'enter-room' | 'return-model' | 'intake' | 'clarify' | 'publish' | 'compare' | 'need-proposal' | 'space' | 'choose-proposal' | 'records' | 'export' | 'assessment' | 'vendor'
+export type WorkflowAction = 'generate' | 'wait-planning' | 'need-rooms' | 'enter-room' | 'return-model' | 'intake' | 'clarify' | 'publish' | 'compare' | 'need-proposal' | 'space' | 'choose-proposal' | 'records' | 'overview' | 'assessment' | 'vendor'
 export type WorkflowTask = { action: WorkflowAction; title: string; description: string; nextLabel: string; busy?: boolean }
 
 /** Describes the next real operation, never fabricates a completed decision. */
@@ -43,7 +43,7 @@ export function workflowTask(facts: WorkflowFacts): WorkflowTask {
       ? task('records', '空间与需求已可对照', '继续查看已经保存的方案选择与待办。', '下一步 · 查看记录')
       : task('choose-proposal', '看完空间，回到方案做选择', '选定哪份方案由你决定；下一步定位到方案选择处。', '下一步 · 选择方案')
     case 'records': return facts.currentSelection
-      ? task('export', '本次选择和待办已经留存', '可导出沟通报告，继续与家人或商家核对。', '导出项目')
+      ? task('overview', '本次选择和待办已经留存', '需要留存报告时，可使用右上角的导出项目。', '返回项目概览')
       : task('choose-proposal', '还需要确认当前需求的方案', '返回方案对比选择；历史记录仍然保留。', '返回方案选择')
     case 'assessment': return task('assessment', '先看需要处理的问题', '现场待测不必全部填完；影响确认的问题会定位到具体事项。', '返回主流程')
     case 'vendor': return task('vendor', '写清楚方案如何回应需求', '声明“已回应”的条目需要具体做法；提交后保留旧版。', '提交方案并继续')

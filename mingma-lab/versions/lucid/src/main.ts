@@ -551,7 +551,7 @@ async function advanceWorkflow() {
       case 'clarify':
         insightVersion = null
         intakeEntry = { focus: true }
-        navigateWithWorkflowHint('clarify', '#intake-brief', state.requirements.length ? '项目背景已变化，请整理并重新确认这轮需求。' : '先写一句你的改造想法，再点下方“下一步”。')
+        navigateWithWorkflowHint('clarify', '.preference-fields, #intake-expression-title', state.requirements.length ? '项目背景已变化，请重新核对本轮选择。' : '先选择本次希望改善的部分，再点下方“下一步”。')
         break
       case 'publish': clickWorkflowControl('[data-action="publish"]'); break
       case 'compare': insightVersion = null; workflowChoosingProposal = false; navigate('compare'); break
@@ -563,7 +563,7 @@ async function advanceWorkflow() {
         else pointWorkflow('[data-action="select-proposal"]:not(:disabled), .proposal-samples', '在你选择的方案下点击“查看并选择此方案”，核对待办后再确认。')
         break
       case 'records': navigate('records'); break
-      case 'export': clickWorkflowControl('[data-action="export"]'); break
+      case 'overview': navigate('overview'); break
       case 'vendor': {
         const blank = draftItems.every(item => !item.text.trim())
         const missing = draftItems.find(item => item.commitment === 'yes' && !item.text.trim())
@@ -724,7 +724,7 @@ function overview() {
               <span><b>${hasProjectDraft() ? '继续我的项目' : '开始硬装规划'}</b><small>${hasProjectDraft() ? `${esc(projectScope())} · ${esc(navs.find(item => item[0] === resumePage())?.[1] || '空间选择')}` : '选择房间，聊聊你想要的家'}</small></span>
               ${icon('chevron', 20)}
             </button>
-            <button class="home-secondary" data-action="${reqs.length ? 'go-requirements' : 'demo'}">${reqs.length ? '继续查看我的需求' : '先体验一个完整案例'}${icon('arrow', 15)}</button>
+            ${reqs.length ? `<button class="home-secondary" data-action="go-requirements">继续查看我的需求${icon('arrow', 15)}</button>` : ''}
             ${hasProjectDraft() ? `<small class="home-resume-meta" data-project-save>${esc(projectSaveText())}</small>` : ''}
           </div>
         </div>
@@ -1266,7 +1266,7 @@ function requireAssessment(action: 'publish' | 'select', key: string) {
   return run
 }
 function records() {
-  return html`${heading('把每次决定，留在这里', '已发布的需求、商家修订和你的最终选择都有记录。', btn(`${icon('export', 16)}导出项目`, 'export', 'secondary-button'))}${state.selection ? `<section class="selection-record"><span class="large-check">${icon('check', 27)}</span><div><h2>已选定 ${esc(state.selection.proposal.vendorName)}</h2><p>需求 R${state.selection.requirements.version} · 方案 V${state.selection.proposal.version} · ${stamp(state.selection.at)}</p><span class="status partial">${state.selection.pending.length ? '仍有 ' + state.selection.pending.length + ' 项待办' : '已记录本次选择'}</span>${latest()?.version !== state.selection.requirements.version ? '<p class="notice warn">当前需求已更新，本记录保留的是历史选择。</p>' : ''}</div>${btn('查看确认内容', 'selection-detail', 'secondary-button')}</section>` : emptyPanel('还没有选定方案', '先比较两家商家的回应，再做出适合你的选择。', 'go-compare', '前往方案对比')}
+  return html`${heading('把每次决定，留在这里', '已发布的需求、商家修订和你的最终选择都有记录。')}${state.selection ? `<section class="selection-record"><span class="large-check">${icon('check', 27)}</span><div><h2>已选定 ${esc(state.selection.proposal.vendorName)}</h2><p>需求 R${state.selection.requirements.version} · 方案 V${state.selection.proposal.version} · ${stamp(state.selection.at)}</p><span class="status partial">${state.selection.pending.length ? '仍有 ' + state.selection.pending.length + ' 项待办' : '已记录本次选择'}</span>${latest()?.version !== state.selection.requirements.version ? '<p class="notice warn">当前需求已更新，本记录保留的是历史选择。</p>' : ''}</div>${btn('查看确认内容', 'selection-detail', 'secondary-button')}</section>` : emptyPanel('还没有选定方案', '先比较两家商家的回应，再做出适合你的选择。', 'go-compare', '前往方案对比')}
     <div class="records-grid">
       <section>
         <div class="section-title">
@@ -1392,6 +1392,9 @@ function render() {
       storage: activeRoomWork() ? ((room: RoomWork) => ({ getItem: () => room.draft, setItem: (_key: string, value: string) => { room.draft = value; scheduleProjectSave() } }))(activeRoomWork()!) : demoIntakeStorage,
       storageStatus: projectSaveText,
       spatialModel: planning.model(),
+      activeRoomId: state.activeRoomId,
+      activeRoomName: activeRoomWork()?.name,
+      onChooseRoom: enterRoomWork,
       onSpatialFocus: intakePreview.update,
       onFirstExpression: intakePreview.acknowledgeBrief,
       onNotice: toast,

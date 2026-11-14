@@ -1,7 +1,10 @@
 import { requestIntake } from './intake-request.ts'
 import './intake-ui.css'
 import './intake-questionnaire.css'
-import { confirmQuestionnaireItem, deferQuestionnaireItem, questionnaireItemIssues, questionnaireReply } from './intake-questionnaire.ts'
+import './intake-preferences.css'
+import { newPreferences, preferenceAnswered, preferenceDetailLimit, preferenceBrief, preferenceQuestions, preferenceRooms, restorePreferencePosition, selectPreference, type PreferenceRoom } from './intake-preferences.ts'
+import { preferencesMarkup } from './intake-preferences-ui.ts'
+import { choiceOnlyAnswer, choiceOnlyQuestion, nonAnswerChoices, confirmQuestionnaireItem, deferQuestionnaireItem, questionnaireItemIssues, questionnaireReply } from './intake-questionnaire.ts'
 import type { PlanningModel } from './planning-floorplan'
 import { intakeSpatialFocus, type SpatialFocus } from './intake-spatial-focus.ts'
 import type { IntakeDocument, IntakeItem, IntakeLegacyRequirement, IntakeResponse, IntakeScope, Necessity, IntakeProjectContextEntry } from './intake-contract.ts'
@@ -24,6 +27,9 @@ type Options = {
   projectContext?: IntakeProjectContextEntry[]
   planningArea?: string | null
   spatialModel?: PlanningModel
+  activeRoomId?: string
+  activeRoomName?: string
+  onChooseRoom?: (id: string, name: string) => void
   onSpatialFocus?: (focus: SpatialFocus, phase: IntakeState['stage'] | 'analyzing') => void
   onFirstExpression?: () => void
   onAdopt: (requirements: IntakeLegacyRequirement[], document: IntakeDocument) => void
@@ -110,6 +116,43 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
     info = `已选满 12 个区域。请先取消一个区域，再勾选${planningArea}。`
   }
   const guided = !!options.questionnaire
+  const rooms = preferenceRooms(options.spatialModel)
+  const initialRoomId = options.activeRoomId || rooms.find(room => state.areas.includes(room.name))?.id || 'whole-home'
+  if (!rooms.some(room => room.id === initialRoomId)) rooms.push({ id: initialRoomId, name: options.activeRoomName || planningArea || state.areas[0] || '当前空间' })
+  if (guided && !state.preferences) state.preferences = newPreferences(initialRoomId, state.brief)
+  const preferenceRoom = (): PreferenceRoom => rooms.find(room => room.id === state.preferences?.roomId) || rooms.find(room => room.id === initialRoomId)!
+  const preferenceList = () => preferenceQuestions(preferenceRoom(), state.preferences!, options.spatialModel)
+  if (guided) state.preferences = restorePreferencePosition(state.preferences!, preferenceRoom(), options.spatialModel)
+  function syncPreferenceBrief() {
+    const brief = preferenceBrief(preferenceRoom(), state.preferences!, options.spatialModel)
+    // Keep the stored legacy brief valid even when an optional note needs shortening.
+    if (brief.length <= 4000) state.brief = brief
+    state.areas = ['whole-home', 'legacy'].includes(preferenceRoom().id) ? [] : [preferenceRoom().name]
+  }
+  function preferenceStep(cursor: number) {
+    const questions = preferenceList()
+    state.preferences!.cursor = Math.max(0, Math.min(cursor, questions.length + 1))
+    state.preferences!.stepId = state.preferences!.cursor === 0 ? 'rooms' : state.preferences!.cursor > questions.length ? 'summary' : questions[state.preferences!.cursor - 1].id
+    error = ''; persist(); render()
+    locate(container.querySelector<HTMLElement>('#intake-expression-title'), container)
+  }
+  async function advancePreference(): Promise<IntakeNavigationIssue | void> {
+    const prefs = state.preferences!
+    const questions = preferenceList()
+    const cursor = Math.min(prefs.cursor, questions.length + 1)
+    const current = questions[cursor - 1]
+    if (current && !preferenceAnswered(current, prefs)) {
+      state.preferences = selectPreference(prefs, current, 'unknown', true)
+      syncPreferenceBrief()
+      contextChanged()
+    }
+    if (cursor <= questions.length) { preferenceStep(cursor + 1); return }
+    const missing = questions.findIndex(q => !preferenceAnswered(q, prefs))
+    if (missing >= 0) { preferenceStep(missing + 1); return guideIssue('.preference-fields', '这题还未作答，可选一项、补充说明或直接点下一题。') }
+    syncPreferenceBrief()
+    if (preferenceBrief(preferenceRoom(), prefs, options.spatialModel).length > 4000) return guideIssue('#preference-include-note', '历史文字记录较长，请取消本轮引用后继续；原记录仍然保留。')
+    return analyzeFromNavigation('refine')
+  }
   let reviewIndex = Math.max(0, state.result?.items.findIndex(item => !state.reviewedIds.includes(item.id)) ?? 0)
   let reviewSummary = false
   let activeQuestionId = ''
@@ -125,7 +168,10 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
       }
     } catch { /* Existing state validation handles malformed drafts. */ }
   }
-  const currentQuestion = () => state.result?.questions.find(question => question.id === activeQuestionId) ?? pendingQuestions(state)[0]
+  const currentQuestion = () => {
+    const question = state.result?.questions.find(question => question.id === activeQuestionId) ?? pendingQuestions(state)[0]
+    return guided && question ? choiceOnlyQuestion(question) : question
+  }
   let filter: Filter = 'all'
   let areaCustom = ''
   let lastMode: 'refine' | 'draft' = 'refine'
@@ -218,6 +264,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
     anchor?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' })
   }
   function introduction() {
+    if (guided) return preferencesMarkup(state.preferences!, preferenceRoom(), rooms, options.spatialModel, busy || storageBlocked)
     const choices = [...new Set([...areaChoices, ...state.areas])]
     const areaField = `<fieldset class="intake-area-field"><legend>这次涉及哪些区域？<span>可多选，也可以暂不确定</span></legend><div class="intake-chips">${choices.map(area => `<label class="intake-chip"><input type="checkbox" data-intake-area="${esc(area)}" ${state.areas.includes(area) ? 'checked' : ''} ${busy ? 'disabled' : ''}/><span>${esc(area)}</span></label>`).join('')}</div><div class="intake-custom-area"><label class="intake-sr" for="intake-area-custom">补充自定义区域</label><input id="intake-area-custom" data-intake-field="area-custom" maxlength="40" placeholder="补充区域，如儿童房" value="${esc(areaCustom)}" ${busy ? 'disabled' : ''}/>${button('添加区域', 'add-area', 'secondary', '', busy)}</div></fieldset>`
     return `<div class="intake-layout">
@@ -243,18 +290,20 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
   }
   function historyMarkup() {
     if (!state.answers.length) return ''
+    if (guided) return `<details class="intake-history"><summary>回看 ${state.answers.length} 条历史回答</summary>${state.answers.map((answer, index) => `<section class="intake-history-entry"><h4>${index + 1}. ${esc(answer.question)}</h4><p class="preference-history-note">${esc(answer.answer)}</p>${state.result?.questions.some(question => question.id === answer.id) ? button('重新选择', 'rechoose-answer', 'text', `data-intake-id="${esc(answer.id)}"`, busy) : ''}</section>`).join('')}</details>`
     return `<details class="intake-history"><summary>回看与修改 ${state.answers.length} 条回答</summary><div>${state.answers.map((answer, index) => `<section class="intake-history-entry"><label class="intake-label" for="intake-history-${esc(answer.id)}">${index + 1}. ${esc(answer.question)}</label><textarea id="intake-history-${esc(answer.id)}" data-intake-answer="${esc(answer.id)}" maxlength="2000" rows="2" ${busy ? 'disabled' : ''}>${esc(answer.answer)}</textarea><div class="intake-history-foot"><span>${answer.disposition === 'deferred' ? '已暂缓，后续保留为待办' : '已记录你的回答'}</span>${button('移除此回答', 'remove-answer', 'text', `data-intake-id="${esc(answer.id)}"`, busy)}</div></section>`).join('')}</div></details>`
   }
   function conversation(question = currentQuestion()) {
     if (question && state.reply.questionId !== question.id) state.reply = questionnaireReply(question, state.answers.find(answer => answer.id === question.id)?.answer)
+    if (guided && question) state.reply.free = ''
     const batch = state.result?.questions || []
     const questionIndex = batch.findIndex(q => q.id === question?.id)
     const answeredInBatch = batch.filter(q => state.answers.some(a => a.id === q.id)).length
     const target = state.result?.items.find(x => x.id === question?.targetId)
     return `<div class="intake-layout"><section class="intake-panel intake-conversation">${guided ? '<details class="questionnaire-understanding"><summary>回看 AI 对需求的理解</summary>' : ''}<div class="intake-understanding"><span class="intake-assistant-symbol">${icon('spark')}</span><div><h2>我对你的理解</h2><p>${esc(state.result?.summary)}</p></div></div>
-      <div class="intake-understanding-actions">${button('补充或纠正原始表达', 'edit-brief', 'text', '', busy)}${state.needsAnalysis ? '<span class="intake-tag">新回答待整理</span>' : ''}</div>${guided ? '</details>' : ''}
+      <div class="intake-understanding-actions">${button(guided ? '返回修改偏好选择' : '补充或纠正原始表达', 'edit-brief', 'text', '', busy)}${state.needsAnalysis ? '<span class="intake-tag">新回答待整理</span>' : ''}</div>${guided ? '</details>' : ''}
       ${guided && question ? `<div class="questionnaire-question-progress"><span>本轮第 ${questionIndex + 1} / ${batch.length} 题</span><span>已填写 ${state.answers.length} 题</span><progress max="${batch.length}" value="${answeredInBatch}" aria-label="本轮补充进度"></progress></div>` : ''}
-      ${question ? `<form data-intake-form="answer" class="intake-question"><p class="intake-question-context">${esc(target?.title || '整体改造范围')} · ${esc(dimensionLabels[question.dimension] || question.dimension)}</p><h3>${esc(question.text)}</h3><p class="intake-question-reason">${esc(question.reason)}</p><fieldset class="intake-options"><legend class="intake-sr">${esc(question.text)}（${question.allowMultiple ? '可多选' : '单选'}）</legend>${question.options.map((choice, index) => `<label class="intake-option"><input type="${question.allowMultiple ? 'checkbox' : 'radio'}" id="intake-choice-${esc(question.id)}-${index}" name="intake-choice" data-intake-choice="${esc(choice)}" value="${esc(choice)}" ${state.reply.selected.includes(choice) ? 'checked' : ''} ${busy ? 'disabled' : ''}/><span>${esc(choice)}</span><span class="intake-choice-mark" aria-hidden="true">${icon('check')}</span></label>`).join('')}</fieldset><span class="intake-fine">${question.allowMultiple ? '可选择多个符合情况的选项。' : '选择最符合情况的一项。'}也可以直接写下自己的回答。</span><label class="intake-label" for="intake-free-answer">自由补充</label><textarea id="intake-free-answer" data-intake-field="free-answer" rows="3" maxlength="2000" placeholder="选项没有说全的部分，写在这里…" ${busy ? 'disabled' : ''}>${esc(state.reply.free)}</textarea><div class="intake-action-row">${guided ? button('上一步', 'previous-question', 'secondary', '', busy) : ''}${button(guided ? '暂不确定，稍后再说' : '暂时跳过', 'skip', 'text', '', busy)}<button type="submit" class="intake-button intake-button--primary" data-intake-action="answer" ${busy ? 'disabled' : ''}>${guided ? (questionIndex < batch.length - 1 ? '保存，下一题' : '保存并整理问卷') : '确认回答'} ${icon('arrow')}</button></div></form>` : `<div class="intake-question"><h3>${state.needsAnalysis ? '这些新回答，准备好一起整理了。' : '可以先看一份需求草稿。'}</h3><p>${esc(state.result?.stopReason || '已有内容会形成可编辑草稿，现场条件和未决事项继续保留。')}</p><div class="intake-action-row">${button('查看现有草稿', 'show-draft', 'secondary', '', busy)}${button(state.needsAnalysis ? '整理最新草稿' : '继续检查信息缺口', state.needsAnalysis ? 'draft-latest' : 'analyze', 'primary', '', busy)}</div></div>`}
+      ${question ? `<form data-intake-form="answer" class="intake-question"><p class="intake-question-context">${esc(target?.title || '整体改造范围')} · ${esc(dimensionLabels[question.dimension] || question.dimension)}</p><h3>${esc(question.text)}</h3><p class="intake-question-reason">${esc(question.reason)}</p><fieldset class="intake-options"><legend class="intake-sr">${esc(question.text)}（${question.allowMultiple ? '可多选' : '单选'}）</legend>${question.options.map((choice, index) => `<label class="intake-option"><input type="${question.allowMultiple ? 'checkbox' : 'radio'}" id="intake-choice-${esc(question.id)}-${index}" name="intake-choice" data-intake-choice="${esc(choice)}" value="${esc(choice)}" ${state.reply.selected.includes(choice) ? 'checked' : ''} ${busy ? 'disabled' : ''}/><span>${esc(choice)}</span><span class="intake-choice-mark" aria-hidden="true">${icon('check')}</span></label>`).join('')}</fieldset><span class="intake-fine">${question.allowMultiple ? '可选择多个符合情况的选项。' : '选择最符合情况的一项。'}${guided ? '不确定或选项不适合时，也可以选择相应选项。' : '也可以直接写下自己的回答。'}</span>${guided ? '' : `<label class="intake-label" for="intake-free-answer">自由补充</label><textarea id="intake-free-answer" data-intake-field="free-answer" rows="3" maxlength="2000" placeholder="选项没有说全的部分，写在这里…" ${busy ? 'disabled' : ''}>${esc(state.reply.free)}</textarea>`}<div class="intake-action-row">${guided ? button('上一步', 'previous-question', 'secondary', '', busy) : ''}${button(guided ? '暂不确定，稍后再说' : '暂时跳过', 'skip', 'text', '', busy)}<button type="submit" class="intake-button intake-button--primary" data-intake-action="answer" ${busy ? 'disabled' : ''}>${guided ? (questionIndex < batch.length - 1 ? '保存，下一题' : '保存并整理问卷') : '确认回答'} ${icon('arrow')}</button></div></form>` : `<div class="intake-question"><h3>${state.needsAnalysis ? '这些新回答，准备好一起整理了。' : '可以先看一份需求草稿。'}</h3><p>${esc(state.result?.stopReason || '已有内容会形成可编辑草稿，现场条件和未决事项继续保留。')}</p><div class="intake-action-row">${button('查看现有草稿', 'show-draft', 'secondary', '', busy)}${button(state.needsAnalysis ? '整理最新草稿' : '继续检查信息缺口', state.needsAnalysis ? 'draft-latest' : 'analyze', 'primary', '', busy)}</div></div>`}
       ${historyMarkup()}
     </section>${guided ? '' : summaryAside()}</div>`
   }
@@ -270,14 +319,14 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
       ${item.pending.length ? `<details class="intake-pending"><summary>${item.pending.length} 项待确认${item.pending.some(x => x.blocking && ['user', 'unassigned'].includes(x.owner)) ? ' · 包含业主决策' : ''}</summary><ul>${item.pending.map(p => `<li><span class="intake-owner">${ownerLabels[p.owner]}</span><span>${esc(p.question)}${p.blocking ? '<small>影响当前方案方向</small>' : ''}</span></li>`).join('')}</ul></details>` : ''}
       ${item.evidence.length ? `<details class="intake-evidence"><summary>查看原话依据${edited ? '（当前描述已有你的修改）' : ''}</summary>${item.evidence.map(e => `<blockquote><small>${sourceText(e.sourceId)}</small><p>${esc(e.quote)}</p></blockquote>`).join('')}</details>` : `<p class="intake-fine">${edited ? '由你补充的内容，采用前请确认。' : '没有用户原话依据，保留为待采纳建议。'}</p>`}
       ${compact ? '</details>' : ''}
-      <details class="intake-editor" ${item.title === '新的需求' ? 'open' : ''}><summary>${icon('edit')} 编辑范围与描述</summary><div class="intake-editor-grid">
+      ${compact ? button('返回选择修改', 'edit-brief', 'text', '', busy) : `<details class="intake-editor" ${item.title === '新的需求' ? 'open' : ''}><summary>${icon('edit')} 编辑范围与描述</summary><div class="intake-editor-grid">
         <label>需求名称<input maxlength="100" id="intake-edit-title-${esc(item.id)}" data-intake-edit="title" data-intake-id="${esc(item.id)}" value="${esc(item.title)}" ${busy ? 'disabled' : ''}/></label>
         <label>作用范围<select id="intake-edit-scope-${esc(item.id)}" data-intake-edit="scope" data-intake-id="${esc(item.id)}" ${busy ? 'disabled' : ''}>${Object.entries(scopeLabels).map(([value, label]) => `<option value="${value}" ${item.scope === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
         <label class="intake-full">关联区域<input id="intake-edit-areas-${esc(item.id)}" data-intake-edit="areas" data-intake-id="${esc(item.id)}" maxlength="300" value="${esc(item.areas.join('、'))}" placeholder="例如：客厅、公共走道" ${['global', 'unassigned'].includes(item.scope) || busy ? 'disabled' : ''}/><small>全局项关联全屋；归属不明时先保持待定。</small></label>
         <label>工程类别<input id="intake-edit-category-${esc(item.id)}" data-intake-edit="category" data-intake-id="${esc(item.id)}" maxlength="80" value="${esc(item.category)}" ${busy ? 'disabled' : ''}/></label>
         <label>构件<input id="intake-edit-component-${esc(item.id)}" data-intake-edit="component" data-intake-id="${esc(item.id)}" maxlength="80" value="${esc(item.component)}" ${busy ? 'disabled' : ''}/></label>
         <label class="intake-full">希望达到什么效果<textarea id="intake-edit-description-${esc(item.id)}" data-intake-edit="description" data-intake-id="${esc(item.id)}" rows="3" maxlength="2000" ${busy ? 'disabled' : ''}>${esc(item.description)}</textarea><small>修改描述后，原有数值标准会重新标为待确认。</small></label>
-      </div></details>
+      </div></details>`}
       <div class="intake-item-footer"><label class="intake-necessity">重要程度<select id="intake-edit-necessity-${esc(item.id)}" data-intake-edit="necessity" data-intake-id="${esc(item.id)}" aria-label="${esc(item.title)}的重要程度" ${busy ? 'disabled' : ''}>${Object.entries(necessityLabels).map(([value, label]) => `<option value="${value}" ${item.necessity === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>${compact ? '' : `<div class="intake-confirmations">
         ${item.origin === 'suggestion' ? `<label class="intake-check"><input type="checkbox" id="intake-accept-${esc(item.id)}" data-intake-accept="${esc(item.id)}" ${state.acceptedSuggestionIds.includes(item.id) ? 'checked' : ''} ${busy ? 'disabled' : ''}/><span>采纳这条建议</span></label>` : ''}
         <label class="intake-check"><input type="checkbox" id="intake-review-${esc(item.id)}" data-intake-review="${esc(item.id)}" ${reviewed && isIncluded ? 'checked' : ''} ${!isIncluded || busy ? 'disabled' : ''}/><span>我已核对这一条的范围与描述</span></label>
@@ -309,7 +358,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
   }
   function questionnaireProgress() {
     const step = state.stage === 'express' ? 0 : state.stage === 'refine' ? 1 : reviewSummary ? 3 : 2
-    const labels = ['表达想法', '补充细节', '逐条确认', '提交问卷']
+    const labels = ['选择偏好', '补充细节', '逐条确认', '提交问卷']
     return `<div class="questionnaire-progress"><div><strong>需求问卷 <small class="intake-save-state" data-intake-save-state>${esc(storageError || savedMessage())}</small></strong><span>第 ${step + 1} / 4 步</span></div><progress value="${step}" max="4" aria-label="需求问卷进度"></progress><nav aria-label="问卷步骤">${labels.map((label, index) => `<button type="button" data-intake-action="wizard-stage" data-intake-id="${index}" ${busy || index > furthestStage ? 'disabled' : ''} ${step === index ? 'aria-current="step"' : ''}><span>${index + 1}</span>${label}</button>`).join('')}</nav></div>`
   }
   function questionnaireDraft() {
@@ -323,10 +372,10 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
         ${options.existingCount > 0 ? `<label class="intake-check intake-replace"><input type="checkbox" data-intake-field="replace" ${state.replaceAcknowledged ? 'checked' : ''}/><span>用本次问卷更新当前 ${options.existingCount} 条草稿，保留已发布版本</span></label>` : ''}
         ${issues.length ? `<div class="questionnaire-resolution" role="status"><h3>提交前还需要处理</h3><ul class="intake-adopt-issues">${issues.map(issue => `<li>${esc(issue)}</li>`).join('')}</ul>${state.needsAnalysis ? button('整理最新回答', 'draft-latest', 'secondary', '', busy) : button('返回逐条检查', 'review-first', 'secondary', '', busy)}</div>` : '<p class="intake-ready">已准备好。下一页会展示完整清单，由你确认提交给商家。</p>'}
         <div class="questionnaire-actions">${button('上一步', 'review-last', 'secondary', '', busy)}${button(`提交问卷，查看我的需求 ${icon('arrow')}`, 'adopt', 'primary', '', busy || storageBlocked || issues.length > 0)}</div>
-        <details class="questionnaire-more"><summary>导出或补充内容</summary>${button('导出需求文档', 'export-md', 'text')}${button('补充一条需求', 'add-item', 'text', '', busy)}${button('继续补充想法', 'edit-brief', 'text', '', busy)}</details>
+        <details class="questionnaire-more"><summary>导出或补充内容</summary>${button('导出需求文档', 'export-md', 'text')}${button('返回选择偏好', 'edit-brief', 'text', '', busy)}</details>
       </div></section>`
     }
-    if (!items.length) return `<section class="questionnaire-sheet"><h2 id="intake-draft-title">再补充一点你的想法</h2><p>这次还没有整理出可确认的需求。</p>${button('返回填写', 'edit-brief', 'primary')}</section>`
+    if (!items.length) return `<section class="questionnaire-sheet"><h2 id="intake-draft-title">再选择一些需要改善的部分</h2><p>这次还没有整理出可确认的需求。</p>${button('返回选择', 'edit-brief', 'primary')}</section>`
     reviewIndex = Math.max(0, Math.min(reviewIndex, items.length - 1))
     const item = items[reviewIndex]
     const itemIssues = questionnaireItemIssues(state, item)
@@ -336,8 +385,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
       <progress value="${reviewIndex}" max="${items.length}" aria-label="逐条确认进度"></progress>
       ${state.needsAnalysis ? `<div class="intake-notice intake-notice--warning"><p>你修改了回答，先更新草稿，再继续确认。</p>${button('整理最新草稿', 'draft-latest', 'primary', '', busy)}</div>` : ''}
       ${renderItem(item, true)}
-      ${itemIssues.length && !['undecided', 'excluded'].includes(item.necessity) ? `<div class="questionnaire-resolution"><h3>这条还需要你做个决定</h3>${ownerQuestions.length ? ownerQuestions.map(q => `<p>${esc(q.question)}</p>`).join('') : `<p>${esc(itemIssues[0])}</p>`}<p class="intake-fine">可以补充答案，也可以暂不纳入本次需求。</p>${button(ownerQuestions.length ? '补充回答' : '编辑这条需求', 'resolve-item', 'secondary', `data-intake-id="${esc(item.id)}"`, busy)}</div>` : ''}
-      ${ownerQuestions.length ? `<form class="questionnaire-resolution-form" data-intake-form="resolve" data-intake-id="${esc(item.id)}" hidden><label class="intake-label" for="intake-owner-answer">你的决定</label><textarea id="intake-owner-answer" maxlength="2000" rows="3" placeholder="写下你的选择；不知道专业条件也没关系。" required></textarea><button class="intake-button intake-button--primary" type="submit">保存回答并更新草稿</button></form>` : ''}
+      ${itemIssues.length && !['undecided', 'excluded'].includes(item.necessity) ? `<div class="questionnaire-resolution"><h3>这条还需要你做个决定</h3>${ownerQuestions.length ? ownerQuestions.map(q => `<p>${esc(q.question)}</p>`).join('') : `<p>${esc(itemIssues[0])}</p>`}<p class="intake-fine">可以继续用选择题补齐，也可以暂不纳入本次需求。</p>${button('继续选择题', 'resolve-item', 'secondary', `data-intake-id="${esc(item.id)}"`, busy)}</div>` : ''}
       <div class="questionnaire-actions">
         ${button('上一步', 'review-prev', 'secondary', '', busy)}
         ${button('暂不纳入', 'review-defer', 'text', `data-intake-id="${esc(item.id)}"`, busy || state.needsAnalysis)}
@@ -358,7 +406,9 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
     if (disposed) return
     const question = state.stage === 'refine' ? currentQuestion() : undefined
     const target = state.result?.items.find(item => item.id === question?.targetId)
-    options.onSpatialFocus?.(intakeSpatialFocus(state.areas, question, target, options.spatialModel), busy ? 'analyzing' : question ? 'refine' : state.stage === 'express' ? 'express' : 'draft')
+    const preferenceArea = guided && state.stage === 'express' ? preferenceRoom() : undefined
+    const focusedAreas = preferenceArea ? ['whole-home', 'legacy'].includes(preferenceArea.id) ? [] : [preferenceArea.name] : state.areas
+    options.onSpatialFocus?.(intakeSpatialFocus(focusedAreas, question, target, options.spatialModel), busy ? 'analyzing' : question ? 'refine' : state.stage === 'express' ? 'express' : 'draft')
     const openDetails = [...container.querySelectorAll<HTMLDetailsElement>('details[open]')].map(detail => ({ className: detail.className, itemId: detail.closest<HTMLElement>('[data-intake-item]')?.dataset.intakeItem }))
     const focused = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null
     const focusedId = focused && container.contains(focused) ? focused.id : ''
@@ -367,7 +417,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
       ${planningArea !== undefined ? `<div class="intake-notice intake-planning-context"><strong>${planningArea ? `当前规划 · ${esc(planningArea)}` : '全屋硬装规划'}</strong><a href="#planning">返回空间选择</a></div>` : ''}
       ${statusMarkup()}${projectContextMarkup()}
       ${state.stage === 'express' || !state.result ? introduction() : state.stage === 'refine' ? conversation(question) : guided ? questionnaireDraft() : draft()}
-      <footer class="intake-bottom"><span>AI 帮助理解与整理，最终范围和取舍由你决定。</span>${button('开始新的访谈', 'new', 'text', '', busy)}</footer>
+      <footer class="intake-bottom"><span>AI 帮助理解与整理，最终范围和取舍由你决定。</span>${button(guided ? '重新填写本轮问卷' : '开始新的访谈', 'new', 'text', '', busy)}</footer>
       ${requestStatusMarkup()}`
     for (const detail of openDetails) {
       const parent = detail.itemId ? container.querySelector<HTMLElement>(`[data-intake-item="${detail.itemId}"]`) : container
@@ -385,14 +435,19 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
     navigationChanged()
   }
   function navigation(): IntakeNavigation {
-    const base = { busy, backAvailable: state.stage !== 'express' && !!state.result }
+    const base = { busy, backAvailable: (state.stage !== 'express' && !!state.result) || (guided && state.stage === 'express' && state.preferences!.cursor > 0) }
     if (busy) return { ...base, title: '正在整理你的回答', description: '内容已保留，整理完成后继续。需要修改时可以取消整理。', nextLabel: '正在整理…' }
     if (storageBlocked) return { ...base, title: '先恢复原来的访谈', description: '原记录无法读取，先导出原始记录，再决定是否开始新访谈。', nextLabel: '下一步' }
     if (requestFeedback === 'error') return { ...base, title: '重新整理这一轮回答', description: '输入和已有草稿均已保留，点击后重新尝试。', nextLabel: '重新整理' }
+    if (guided && (!state.result || state.stage === 'express')) {
+      const cursor = state.preferences!.cursor
+      const questions = preferenceList()
+      return { ...base, title: cursor === 0 ? '选择本次规划的房间' : cursor > questions.length ? '核对本轮选择' : questions[cursor - 1].title.replace(`${preferenceRoom().name}，`, ''), description: cursor === 0 ? '每个房间独立保存，接着选择你在意的功能与细节。' : cursor > questions.length ? '确认后，AI 会按这些选择整理需求；也可以回去修改。' : '可以选答案或补充一句。留空点下一题会记为待确认。', nextLabel: cursor === 0 ? '开始选择偏好' : cursor > questions.length ? '确认选择，整理需求' : '下一题' }
+    }
     if (!state.result || state.stage === 'express') return { ...base, title: '说说你想改什么', description: '写下生活中的不方便，再确认本次涉及的区域。', nextLabel: '下一步' }
     if (state.stage === 'refine') {
       const question = currentQuestion()
-      return { ...base, title: question ? '补充这一个问题' : '准备查看需求草稿', description: question ? '选择符合情况的回答，也可以自己补充；不清楚时可选“暂不确定”。' : '逐条检查 AI 整理出的需求，确认是否符合你的想法。', nextLabel: !question && state.needsAnalysis ? '整理草稿，下一步' : '下一步' }
+      return { ...base, title: question ? '选择这一个问题的回答' : '准备查看需求草稿', description: question ? '选择符合情况的回答；不清楚或选项不适合时，可选择对应选项。' : '逐条检查 AI 整理出的需求，确认是否符合你的想法。', nextLabel: !question && state.needsAnalysis ? '整理草稿，下一步' : '下一步' }
     }
     if (state.needsAnalysis) return { ...base, title: '先整理最新的修改', description: '你更新了表达或回答，需要整理后再逐条确认。', nextLabel: '更新草稿，下一步' }
     if (reviewSummary || !guided) return { ...base, title: '确认这份需求清单', description: '检查纳入内容；提交问卷只更新草稿，正式发布仍由你确认。', nextLabel: '提交问卷，下一步' }
@@ -417,6 +472,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
     }
     const field = (name: string) => `#intake-edit-${name}-${CSS.escape(item.id)}`
     if (['undecided', 'excluded'].includes(item.necessity)) return guideIssue(field('necessity'), message)
+    if (guided) return guideIssue('.questionnaire-resolution, [data-intake-item]', `${message} 可继续选择题补齐，或选择暂不纳入。`)
     for (const name of ['title', 'description', 'category', 'component'] as const) {
       if (!item[name].trim()) return guideIssue(field(name), message)
     }
@@ -432,6 +488,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
   async function analyzeFromNavigation(mode: 'refine' | 'draft'): Promise<IntakeNavigationIssue | void> {
     if (!state.brief.trim()) {
       if (state.stage !== 'express') chooseStage('express')
+      if (guided) return guideIssue('.preference-fields', '先选择本次希望改善的部分，再继续。')
       return guideIssue('#intake-brief', '先写一句你想改善的地方，再点下一步。')
     }
     const incomplete = state.result?.items.find(item => !item.title.trim() || !item.description.trim() || !item.category.trim() || !item.component.trim())
@@ -445,6 +502,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
     if (storageBlocked) return guideIssue('.intake-notice--warning', storageError)
     if (requestFeedback === 'error') return analyzeFromNavigation(lastMode)
     if (!state.result || state.stage === 'express') {
+      if (guided) return advancePreference()
       if (!state.brief.trim()) return guideIssue('#intake-brief', '先写一句你想改善的地方，再点下一步。')
       return analyzeFromNavigation('refine')
     }
@@ -454,7 +512,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
         if (state.needsAnalysis) return analyzeFromNavigation('draft')
         chooseStage('draft'); return
       }
-      if (!state.reply.selected.length && !state.reply.free.trim()) return guideIssue('.intake-options', '先选一个回答，或在下面写下补充；不清楚时可以选择“暂不确定”。')
+      if (!state.reply.selected.length && (guided || !state.reply.free.trim())) return guideIssue('.intake-options', guided ? '先选一个回答；不清楚时可以选择“暂不确定”。' : '先选一个回答，或写下补充。')
       await submitAnswer()
       if (error) return guideIssue(container.querySelector('[data-intake-request-status="error"]') ? '[data-intake-request-status]' : '.intake-question', error)
       return
@@ -497,7 +555,10 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
   function previous(): boolean {
     if (disposed) return false
     if (busy) invalidateFlight()
-    if (!state.result || state.stage === 'express') return false
+    if (!state.result || state.stage === 'express') {
+      if (guided && state.preferences!.cursor > 0) { preferenceStep(state.preferences!.cursor - 1); return true }
+      return false
+    }
     if (state.stage === 'draft') {
       if (reviewSummary) moveReview(Math.max(0, state.result.items.length - 1))
       else if (reviewIndex > 0) moveReview(reviewIndex - 1)
@@ -598,9 +659,10 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
     if (busy) return
     const question = currentQuestion()
     if (!question) return
-    const answer = skip ? '暂时跳过，保留为待确认。' : [state.reply.selected.join('、'), state.reply.free.trim()].filter(Boolean).join('；补充：')
+    const selectedAnswer = choiceOnlyAnswer(question, state.reply.selected)
+    const answer = skip ? '暂时跳过，保留为待确认。' : guided ? selectedAnswer.answer : [state.reply.selected.join('、'), state.reply.free.trim()].filter(Boolean).join('；补充：')
     try {
-      state = answerQuestion(state, question, answer, skip ? 'deferred' : 'answered')
+      state = answerQuestion(state, question, answer, skip ? 'deferred' : guided ? selectedAnswer.disposition : 'answered')
       activeQuestionId = ''; error = ''; persist()
       if (pendingQuestions(state).length) { render(); locate(container.querySelector<HTMLElement>('.intake-question h3'), guided ? container : undefined) }
       else await analyze('refine')
@@ -621,6 +683,21 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
     const id = target.dataset.intakeId || ''
     if (action === 'answer') return // native form submit owns this action
     switch (action) {
+      case 'preference-room': {
+        if (busy || storageBlocked) break
+        const room = rooms.find(room => room.id === id)
+        if (!room || room.id === preferenceRoom().id) break
+        if (options.onChooseRoom) { persist(); options.onChooseRoom(room.id, room.name) }
+        else { state.preferences = newPreferences(room.id); syncPreferenceBrief(); contextChanged(); render() }
+        break
+      }
+      case 'preference-next': {
+        const issue = await advance()
+        if (issue?.message) { error = issue.message; render(); locate(container.querySelector<HTMLElement>('.preference-fields')) }
+        break
+      }
+      case 'preference-back': if (!busy) previous(); break
+      case 'preference-edit': if (!busy && /^\d+$/.test(id)) preferenceStep(Number(id)); break
       case 'wizard-stage': {
         const index = Number(id)
         if (!guided || index > furthestStage || busy) break
@@ -645,6 +722,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
         break
       case 'review-defer': state = deferQuestionnaireItem(state, id); moveReview(reviewIndex + 1); break
       case 'resolve-item': {
+        if (guided) { await analyze('refine'); break }
         const form = container.querySelector<HTMLFormElement>('[data-intake-form="resolve"]')
         if (form) { form.hidden = false; locate(form.querySelector('textarea'), form) }
         else { const editor = container.querySelector<HTMLDetailsElement>('.intake-editor'); if (editor) { editor.open = true; locate(editor) } }
@@ -672,6 +750,11 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
       case 'skip': await submitAnswer(true); break
       case 'inspect-item': chooseStage('draft'); filter = 'all'; render(); requestAnimationFrame(() => container.querySelector<HTMLElement>(`[data-intake-item="${id}"]`)?.focus()); break
       case 'defer-conflict': state = deferConflict(state, id); persist(); render(); break
+      case 'rechoose-answer': {
+        const existing = state.result?.questions.find(question => question.id === id)
+        if (existing) { activeQuestionId = id; state.reply.questionId = ''; chooseStage('refine') }
+        break
+      }
       case 'remove-answer': state.answers = state.answers.filter(x => x.id !== id); contextChanged(); render(); break
       case 'add-item': {
         if (!state.result) break
@@ -695,7 +778,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
       case 'export-raw': download('安居有数原始访谈记录.txt', rawStored, 'text/plain;charset=utf-8'); break
       case 'new':
         if ((state.brief || state.result || rawStored) && !window.confirm('开始新的访谈会替换这份访谈草稿。已发布的需求版本不会改变。需要留存时，请先导出文档。')) return
-        invalidateFlight(); reviewIndex = 0; reviewSummary = false; furthestStage = 0; activeQuestionId = ''; state = newIntakeState('', options.projectContext ?? state.projectContext ?? []); rawStored = ''; storageBlocked = false; storageError = ''; error = ''; info = ''; filter = 'all'; persist(); render(); break
+        invalidateFlight(); reviewIndex = 0; reviewSummary = false; furthestStage = 0; activeQuestionId = ''; state = newIntakeState('', options.projectContext ?? state.projectContext ?? []); if (guided) state.preferences = newPreferences(initialRoomId); rawStored = ''; storageBlocked = false; storageError = ''; error = ''; info = ''; filter = 'all'; persist(); render(); break
     }
   }
   function updateEditedText(input: HTMLInputElement | HTMLTextAreaElement) {
@@ -741,9 +824,32 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
   }
   function onInput(event: Event) {
     const input = event.target as HTMLInputElement | HTMLTextAreaElement
+    if (guided && input.dataset.preferenceDetail && !busy && !storageBlocked) {
+      const draft = state.preferences!
+      const questions = preferenceList()
+      const question = questions[draft.cursor - 1]
+      if (question?.id !== input.dataset.preferenceDetail) return
+      draft.details = { ...draft.details, [question.id]: input.value.slice(0, preferenceDetailLimit) }
+      syncPreferenceBrief()
+      contextChanged()
+      const completed = questions.filter(q => preferenceAnswered(q, draft)).length
+      const progress = container.querySelector<HTMLProgressElement>('.preference-progress progress')
+      const count = container.querySelector('[data-preference-complete]')
+      if (progress) progress.value = completed
+      if (count) count.textContent = `已答 ${completed} / ${questions.length} 题`
+      for (const button of container.querySelectorAll<HTMLElement>('[data-preference-group]')) {
+        const group = questions.filter(q => q.group === button.dataset.preferenceGroup)
+        const remaining = group.filter(q => !preferenceAnswered(q, draft))
+        const label = button.querySelector('small')
+        if (label) label.textContent = `${group.length - remaining.length} / ${group.length}`
+        button.dataset.intakeId = String(questions.indexOf(remaining[0] || group[0]) + 1)
+      }
+      return
+    }
     if (input.dataset.intakeEdit && updateEditedText(input)) return
     switch (input.dataset.intakeField) {
       case 'brief': {
+        if (guided) return
         state.brief = input.value
         contextChanged()
         const count = container.querySelector('[data-intake-brief-count]')
@@ -755,13 +861,24 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
         break
       }
       case 'area-custom': areaCustom = input.value; break
-      case 'free-answer': state.reply.free = input.value; persist(); break
+      case 'free-answer': if (guided) return; state.reply.free = input.value; persist(); break
     }
     navigationChanged()
   }
   function onChange(event: Event) {
     const input = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    if (input.dataset.intakeArea) {
+    if (input.dataset.intakeField === 'include-note' && guided && !busy && !storageBlocked) {
+      state.preferences!.includeNote = (input as HTMLInputElement).checked
+      syncPreferenceBrief(); contextChanged(); error = ''; render()
+    } else if (input.dataset.preferenceQuestion && guided) {
+      if (busy || storageBlocked || !(input instanceof HTMLInputElement)) return
+      const q = preferenceList().find(q => q.id === input.dataset.preferenceQuestion)
+      if (!q) return
+      state.preferences = selectPreference(state.preferences!, q, input.value, input.checked)
+      state.preferences = restorePreferencePosition({ ...state.preferences, stepId: q.id }, preferenceRoom(), options.spatialModel)
+      syncPreferenceBrief(); contextChanged(); error = ''; render()
+      if (!expressionAcknowledged) { expressionAcknowledged = true; options.onFirstExpression?.() }
+    } else if (input.dataset.intakeArea) {
       const area = input.dataset.intakeArea
       state.areas = (input as HTMLInputElement).checked ? [...new Set([...state.areas, area])] : state.areas.filter(x => x !== area)
       if (state.areas.length > 12) { state.areas = state.areas.filter(x => x !== area); error = '一次最多处理 12 个区域，请按改造范围分批整理。'; render(); return }
@@ -772,8 +889,8 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
       const choice = input.dataset.intakeChoice
       const checked = (input as HTMLInputElement).checked
       if (!question.allowMultiple) state.reply.selected = [choice]
-      else if (choice === '暂不确定' && checked) state.reply.selected = [choice]
-      else state.reply.selected = checked ? [...new Set([...state.reply.selected.filter(x => x !== '暂不确定'), choice])] : state.reply.selected.filter(x => x !== choice)
+      else if (nonAnswerChoices.includes(choice) && checked) state.reply.selected = [choice]
+      else state.reply.selected = checked ? [...new Set([...state.reply.selected.filter(x => !nonAnswerChoices.includes(x)), choice])] : state.reply.selected.filter(x => x !== choice)
       persist(); render()
     } else if (input.dataset.intakeEdit) {
       if ((input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) && updateEditedText(input)) return
@@ -821,7 +938,7 @@ export function mountIntake(container: HTMLElement, options: Options): IntakeSes
   if (areaAdded) contextChanged()
   else if (contextSynchronized || planningArea !== undefined) persist()
   render()
-  return { navigation, advance, previous, refreshSaveState, focusExpression() { chooseStage('express'); container.querySelector<HTMLElement>('#intake-brief')?.focus() }, dispose() {
+  return { navigation, advance, previous, refreshSaveState, focusExpression() { chooseStage('express'); if (guided) preferenceStep(0); else container.querySelector<HTMLElement>('#intake-brief')?.focus() }, dispose() {
     disposed = true; gate.dispose(); controller?.abort()
     container.removeEventListener('click', onClick); container.removeEventListener('input', onInput)
     container.removeEventListener('change', onChange); container.removeEventListener('submit', onSubmit)

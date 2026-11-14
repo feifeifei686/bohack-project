@@ -1,3 +1,4 @@
+import { validPreferences, type PreferenceDraft } from './intake-preferences.ts'
 import type {
   IntakeAnswer, IntakeDocument, IntakeItem, IntakeLegacyRequirement, IntakeQuestion,
   IntakeRequest, IntakeResult, IntakeScope, Necessity, IntakeProjectContextEntry,
@@ -7,6 +8,7 @@ export type IntakeStage = 'express' | 'refine' | 'draft'
 export type IntakeState = {
   schema: 2
   brief: string
+  preferences?: PreferenceDraft
   areas: string[]
   answers: IntakeAnswer[]
   projectContext?: IntakeProjectContextEntry[]
@@ -75,6 +77,7 @@ export function restoreIntakeState(raw: string): IntakeState {
   const value: unknown = JSON.parse(raw)
   if (!record(value) || value.schema !== 2 || !str(value.brief, 4000) || !strings(value.areas, 12) || !Array.isArray(value.answers) || !value.answers.every(validAnswer) || (value.result !== null && !validResult(value.result)) || !inEnum(value.stage, ['express', 'refine', 'draft']) || !strings(value.acceptedSuggestionIds, 30) || !strings(value.reviewedIds, 30) || !strings(value.editedIds, 30) || typeof value.needsAnalysis !== 'boolean' || typeof value.replaceAcknowledged !== 'boolean' || typeof value.revision !== 'number' || !Number.isSafeInteger(value.revision) || !record(value.reply) || !str(value.reply.questionId) || !strings(value.reply.selected, 8) || !str(value.reply.free, 2000)) throw new Error('访谈记录格式不兼容')
   const state = value as unknown as IntakeState
+  if (value.preferences !== undefined && !validPreferences(value.preferences)) throw new Error('房间偏好记录格式不兼容')
   state.projectContext = normalizeProjectContext(value.projectContext ?? [])
   if (!state.result) state.stage = 'express'
   state.revision = Math.max(0, state.revision)
