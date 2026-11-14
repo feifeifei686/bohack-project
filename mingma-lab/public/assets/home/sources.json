@@ -1,0 +1,31 @@
+[
+  {
+    "file": "residence.webp",
+    "source": "abf6d4685b836e008ce2c67e09591545.png",
+    "providedBy": "user",
+    "originalSize": {
+      "width": 1672,
+      "height": 941
+    },
+    "conversion": "cwebp -q 88; original dimensions; no visual edits"
+  },
+  {
+    "file": "structure.webp",
+    "source": "9797d88ffa1fde42db8c7cbcb79d8674.png",
+    "providedBy": "user",
+    "originalSize": {
+      "width": 1672,
+      "height": 941
+    },
+    "conversion": "cwebp -q 88; original dimensions; no visual edits"
+  },
+  {
+    "file": "luminous-atmosphere.webp",
+    "providedBy": "built-in image_gen",
+    "generatedOn": "2026-11-14",
+    "promptFile": "luminous-atmosphere.prompt.txt",
+    "usage": "Decorative abstract atmosphere; animated in CSS. Not a property or merchant claim.",
+    "conversion": "cwebp -q 88; no composition changes",
+    "sha256": "0c6f88f83a749f681179f5851cd532d76048c304d9e0cf2c0c8f5b86ec485f95"
+  }
+]

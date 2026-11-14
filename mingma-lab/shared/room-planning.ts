@@ -34,7 +34,7 @@ const examples: Record<string, RoomNeed[]> = {
 const escape = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)
 const arrow = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg>'
 
-export function createRoomPlanning() {
+export function createRoomPlanning({ editorial = false } = {}) {
   let selectedRoomId = 'bathroom'
   let activeHotspot: string | null = null
   let seen = false
@@ -45,13 +45,12 @@ export function createRoomPlanning() {
 
 
   function render() {
-    return `<section class="room-planning" id="room-planning" aria-labelledby="planning-title">
+    return `<section class="room-planning" id="room-planning" data-stage="${stage}" aria-labelledby="planning-title">
       <header class="planning-header">
         <a class="planning-back" href="#overview">${arrow} 返回项目概览</a>
-        <h1 id="planning-title">从图纸，到你的空间。</h1>
-        <p>从平面图生成户型，选择房间开始规划。</p>
+        ${editorial && stage === 'drawing' ? '' : '<h1 id="planning-title">从图纸，到你的空间。</h1><p>从平面图生成户型，选择房间开始规划。</p>'}
       </header>
-      <div data-drawing-slot ${stage !== 'drawing' ? 'hidden' : ''}>${renderPlanningSource(model)}</div>
+      <div data-drawing-slot ${stage !== 'drawing' ? 'hidden' : ''}>${renderPlanningSource(model, editorial, stage === 'drawing')}</div>
       <div class="planning-layout" ${stage === 'drawing' ? 'hidden' : ''}>
         <div class="planning-model">
           <div class="planning-stage${seen ? '' : ' planning-stage--enter'}">
@@ -161,6 +160,17 @@ export function createRoomPlanning() {
       if (step === 'build' && stage === 'drawing' && model.rooms.length) {
         const drawing = capturePlanningDrawing(slot.querySelector<HTMLElement>('.planning-paper')!, model)
         stage = 'building'
+        root.dataset.stage = stage
+        if (editorial) {
+          const title = root.querySelector('#planning-title')
+          if (title) {
+            title.removeAttribute('id')
+            const heading = document.createElement('h1')
+            heading.id = 'planning-title'
+            heading.textContent = '从图纸，到你的空间。'
+            root.querySelector('.planning-header')!.append(heading)
+          }
+        }
         slot.hidden = true
         layout.hidden = false
         layout.inert = true
@@ -176,6 +186,7 @@ export function createRoomPlanning() {
           },
           () => {
             stage = 'model'
+            root.dataset.stage = stage
             layout.inert = false
             root.classList.remove('is-building')
             for (const property of ['--build-backdrop', '--build-lift', '--build-controls']) root.style.removeProperty(property)

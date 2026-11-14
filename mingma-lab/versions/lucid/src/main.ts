@@ -7,7 +7,13 @@ import { intakeRequirementRow, adoptedIntakeHtml, stateFromAdoptedIntake } from 
 import type { IntakeDocument } from '../../../shared/intake-contract'
 import '../../../shared/intake-bridge.css'
 import './style.css'
+import './home.css'
+import './luminous-workspace.css'
+import './planning-entry.css'
+import { mountHomeScene } from './home-scene'
+import { createHomeArrival } from './home-arrival'
 import { createHoloView } from './glass-model'
+import { renderEngineeringSpace, mountEngineeringSpace } from './engineering-ui'
 import { ownerDimensions, merchantDimensions, dimensionBridges } from './dimensions'
 import type { HouseView } from './house-view'
 import { rooms, routes, type LayerId } from './house-data'
@@ -86,11 +92,16 @@ window.addEventListener('pageshow', event => {
 if (location.hash === '#dimensions') history.replaceState(null, '', '#requirements')
 let page: Page = (location.hash.slice(1) as Page) || 'overview'
 let house: HouseView | undefined
-const planning = createRoomPlanning()
+const planning = createRoomPlanning({ editorial: true })
 let planningEntry: string | null | undefined
 let previewFrom: FloorplanHandoff | undefined
 let intakePreview: ReturnType<typeof mountIntakeSpacePreview> | undefined
 let intakeSession: ReturnType<typeof mountIntake> | undefined
+let disposeHome: (() => void) | undefined
+let disposeEngineering: (() => void) | undefined
+let spaceMode: 'engineering' | 'rooms' = 'engineering'
+let homeArrival: ReturnType<typeof createHomeArrival> | undefined
+let homeArrivalKeyboard = false
 let intakeEntry: { focus: boolean; appendBrief?: string } | null = null
 let vendorDrafts: Record<string, ProposalItem[]> = {}
 const draftKey = () => `${vendorId}-r${latest()?.version || 0}`
@@ -146,8 +157,8 @@ function navigate(to: Page) {
 window.addEventListener('hashchange', () => {
   if (location.hash === '#dimensions') history.replaceState(null, '', '#requirements')
   page = (location.hash.slice(1) as Page) || 'overview'
-  render()
   window.scrollTo(0, 0)
+  render()
 })
 const paths: Record<string, string> = {
   home: 'M3 10 12 3l9 7v10H3V10m6 10v-7h6v7',
@@ -245,16 +256,17 @@ function taskStage() {
 }
 
 function shell(content: string) {
-  return html`<div class="lucid-app page-${page}">
+  if (page === 'overview') return content
+  return html`<div class="lucid-app page-${page}${page === 'planning' ? ' planning-page' : ''}">
     <div class="ambient-scene" aria-hidden="true">
       <div></div>
       <span></span>
     </div>
     <header class="studio-header">
       <div class="header-main">
-        <a class="studio-brand" href="#overview" aria-label="澄境项目首页"
+        <a class="studio-brand" href="#overview" aria-label="安居有数项目首页"
           ><span class="studio-mark">${icon('cube', 25)}</span
-          ><span>明码 <em>澄境</em><small>LUCID SPACE STUDIO</small></span></a
+          ><span>安居有数<small>Dream Defined. Living Refined.</small></span></a
         >
         <div class="project-switch">
           <span class="project-dot"></span>
@@ -270,11 +282,11 @@ function shell(content: string) {
         ${navs.map(([id, text, i]) => html`<a href="#${id}" class="nav-item ${page === id ? 'active' : ''}" ${page === id ? 'aria-current="page"' : ''}>${icon(i, 18)}<span>${text}</span>${id === 'compare' && state.feedback.length ? '<i class="nav-dot"></i>' : ''}</a>`).join('')}
       </nav>
     </header>
-    <main id="main-content" class="studio-main">
+    <main id="main-content" class="studio-main${page === 'planning' ? ' plan-main' : ''}">
       ${content}
     </main>
     <footer class="app-footer">
-      <span>明码 · 让需求与空间相互回应</span>
+      <span>安居有数 · Dream Defined. Living Refined.</span>
       <div><i class="project-dot"></i>演示模式 · 刷新后重新开始</div>
     </footer>
   </div>`
@@ -284,91 +296,94 @@ function overview() {
   const snap = latest()
   const reqs = snap?.requirements ?? state.requirements
   const pending = reqs.reduce((sum, r) => sum + r.pending.length, 0)
-  return html`<div class="workspace-intro">
-      <div>
-        <h1>把生活想法，<em>放进家的每一处。</em></h1>
-        <p>从房间开始，让需求、方案与选择逐渐清晰。</p>
-      </div>
-      <div class="intro-state"><i class="project-dot"></i>${taskStage()}</div>
-    </div>
-    <section class="planning-home glass-surface">
-      <div class="planning-home-copy">
-        <h2>我的第一个家</h2>
-        <p>${esc(state.brief || '从一个房间开始，说说想改动什么、有哪些地方希望保留。')}</p>
-        <div class="notebook-action">
-          ${btn(`开始硬装规划${icon('arrow', 17)}`, 'go-planning')}
-          ${reqs.length ? btn('查看我的需求', 'go-requirements', 'text-button') : btn('体验完整案例', 'demo', 'text-button')}
+  return html`<div class="lucid-app page-overview home-page">
+    <a class="home-skip" href="#home-content">跳到首页内容</a>
+    <header class="home-header">
+      <a class="home-brand" href="#overview" aria-label="安居有数首页">
+        <span class="home-brand-mark">${icon('cube', 27)}</span>
+        <span><b>安居有数</b><small>Dream Defined. Living Refined.</small></span>
+      </a>
+      <nav class="home-navigation" aria-label="快捷导航">
+        <a href="#planning">空间规划</a>
+        <a href="#clarify">需求共创</a>
+        <a href="#compare">方案比对</a>
+      </nav>
+      <details class="home-menu">
+        <summary>项目工作台${icon('plus', 16)}</summary>
+        <div class="home-menu-panel">
+          <nav aria-label="项目导航">
+            ${navs.map(([id, text, i]) => html`<a href="#${id}" ${id === 'overview' ? 'aria-current="page"' : ''}>${icon(i, 18)}${text}</a>`).join('')}
+          </nav>
+          <div class="home-menu-tools">
+            ${btn(`${icon('export', 17)}导出项目`, 'export', 'home-menu-tool')}
+            ${btn(`${icon('info', 17)}关于演示`, 'about', 'home-menu-tool')}
+          </div>
         </div>
-        <dl class="project-facts">
+      </details>
+    </header>
+    <main id="main-content">
+      <section id="home-content" class="home-hero" data-home-scene data-scene="residence" aria-labelledby="home-title" tabindex="-1">
+        <div class="home-atmosphere" aria-hidden="true"></div>
+        <div class="home-art" data-home-canvas aria-label="住宅三维搭建演示">
+          <p class="home-loading" data-home-loading>正在准备三维空间…</p>
+        </div>
+        <div class="home-scene-toolbar">
+          <div class="home-scene-choices" role="group" aria-label="切换三维展示图层">
+            <button type="button" data-home-view="residence" aria-pressed="true" disabled>${icon('home', 16)}完整空间</button>
+            <button type="button" data-home-view="structure" aria-pressed="false" disabled>${icon('layers', 16)}建筑结构</button>
+          </div>
+        </div>
+        <div class="home-hero-bottom">
+          <div class="home-hero-copy">
+            <h1 id="home-title">从家的每一处，<br />对齐你的生活。</h1>
+            <p>把生活想法说清楚，让装修方案有据可循。</p>
+          </div>
+          <div class="home-entry">
+            <button class="home-start" data-action="go-planning">
+              <span class="home-start-symbol">${icon('arrow', 25)}</span>
+              <span><b>开始硬装规划</b><small>选择房间，聊聊你想要的家</small></span>
+              ${icon('chevron', 20)}
+            </button>
+            <button class="home-secondary" data-action="${reqs.length ? 'go-requirements' : 'demo'}">${reqs.length ? '继续查看我的需求' : '先体验一个完整案例'}${icon('arrow', 15)}</button>
+          </div>
+        </div>
+        <div class="home-hero-foot">
+          <span>3D 住宅搭建 · 示意户型</span>
+          <button type="button" class="home-scroll" data-home-scroll>了解规划流程<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 4v16m-6-6 6 6 6-6" /></svg></button>
+          <span class="home-scene-caption" data-home-caption>一座家，逐渐成形</span>
+        </div>
+      </section>
+      <section class="home-process" id="home-process" aria-labelledby="home-process-title" tabindex="-1">
+        <div class="home-process-intro">
+          <h2 id="home-process-title">先说生活，<br />再谈怎么装修。</h2>
+          <p>从一句「厨房想好打理」开始。AI 帮你补齐细节，让每条需求都有对应的空间、做法和回应。</p>
+          <button class="home-text-link" data-action="go-clarify">和 AI 聊聊我的想法${icon('arrow', 18)}</button>
+        </div>
+        <ol class="home-process-list">
+          ${[
+            ['planning', '从空间开始', '选择房间，明确这次想改哪里、保留什么。'],
+            ['clarify', '把想法聊清楚', 'AI 逐步追问，将生活化表达整理成具体要求。'],
+            ['requirements', '确认共同清单', '逐项核对需求，形成商家能够回应的版本。'],
+            ['compare', '让方案有据可循', '对照需求看回应、差异与修订，再做选择。'],
+          ].map(([route, title, desc], i) => html`<li><button data-action="go-${route}"><span class="home-step-index">${String(i + 1).padStart(2, '0')}</span><span><b>${title}</b><small>${desc}</small></span>${icon('arrow', 19)}</button></li>`).join('')}
+        </ol>
+      </section>
+      <section class="home-project" aria-labelledby="home-project-title">
+        <div class="home-project-heading">
+          <div><h2 id="home-project-title">我的第一个家</h2><p>${esc(state.brief || '你的想法、每次确认和方案修订，都从这里接着往下走。')}</p></div>
+          <span class="home-project-status"><i></i>${taskStage()}</span>
+        </div>
+        <dl class="home-project-facts">
           <div><dt>需求条目</dt><dd>${reqs.length ? reqs.length + ' 条' : '尚未建立'}</dd></div>
           <div><dt>现场待办</dt><dd>${pending ? pending + ' 项' : '待梳理'}</dd></div>
           <div><dt>当前基准</dt><dd>${snap ? 'R' + snap.version : '草稿准备'}</dd></div>
+          <div class="home-project-records"><dt>确认与选择</dt><dd><button class="home-text-link" data-action="go-records">查看确认记录${icon('arrow', 17)}</button></dd></div>
         </dl>
-      </div>
-      <figure class="planning-home-photo">
-        <img src="/assets/lucid.webp" alt="自然窗光下的室内材质参考" fetchpriority="high" />
-      </figure>
-    </section>
-    <section class="project-path">
-      <div class="section-title">
-        <h2>接下来，一步一步确认。</h2>
-        <span>每次进展，保留依据</span>
-      </div>
-      <div class="steps">
-        ${[
-          ['planning', '选择空间', '按房间梳理硬装需求'],
-          ['requirements', '形成共同清单', '逐项确认与发布'],
-          ['compare', '审阅商家回应', '证据、差异与修订'],
-          ['records', '留下你的选择', '版本和待办一起保存'],
-        ]
-          .map(
-            ([route, t, d], i) =>
-              html`<button
-                class="step ${(!snap && i === 0) || (snap && !hasCurrentSelection() && i === 2) ? 'current' : ''}"
-                data-action="go-${route}"
-              >
-                <span class="step-number"
-                  >${(i < 2 && snap) || (i === 3 && hasCurrentSelection()) ? icon('check', 17) : String(i + 1).padStart(2, '0')}</span
-                >
-                <div><b>${t}</b><small>${d}</small></div>
-                ${icon('chevron', 15)}
-              </button>`,
-          )
-          .join('')}
-      </div>
-    </section>
-    <section class="project-journal">
-      <div class="journal-title">
-        <h2>项目轨迹</h2>
-        <p>清楚的需求，是顺畅协作的起点。</p>
-        <button class="text-button" data-action="go-records">
-          查看全部记录${icon('arrow', 16)}
-        </button>
-      </div>
-      <div class="journal-entries">
-        ${
-          state.events.length
-            ? state.events
-                .slice(0, 3)
-                .map(
-                  (e) =>
-                    html`<div class="activity-row">
-                      <i></i>
-                      <p>${esc(e.text)}</p>
-                      <time>${stamp(e.at)}</time>
-                    </div>`,
-                )
-                .join('')
-            : html`<div class="journal-empty">
-                ${icon('chat', 22)}
-                <div>
-                  <b>还没有记录，先开始一次共创。</b>
-                  <p>确认需求、接收方案和每次修订都会记录在这里。</p>
-                </div>
-              </div>`
-        }
-      </div>
-    </section>`
+        ${state.events.length ? html`<ol class="home-events">${state.events.slice(0, 3).map(e => html`<li><p>${esc(e.text)}</p><time>${stamp(e.at)}</time></li>`).join('')}</ol>` : ''}
+      </section>
+    </main>
+    <footer class="home-footer"><span>安居有数</span><p>Dream Defined. Living Refined.</p><small>演示模式 · 刷新后重新开始</small></footer>
+  </div>`
 }
 
 const questions: {
@@ -723,7 +738,10 @@ ${esc(item?.text || '')}</textarea>
 }
 function space() {
   const r = rooms.find((r) => r.id === selectedRoom)!
-  return html`${heading('在空间里，看懂你的方案', '点选房间与水电示意线路，查看对应的需求和施工内容。')}
+  const intro = html`${heading('把装修，一层层看清楚。', '从隐藏工程到最终居住，用同一套户型理解每一步。')}
+    <div class="space-mode-switch" role="group" aria-label="空间预览方式"><button data-action="space-engineering" aria-pressed="${spaceMode === 'engineering'}">工程分层</button><button data-action="space-rooms" aria-pressed="${spaceMode === 'rooms'}">房间与线路</button></div>`
+  if (spaceMode === 'engineering') return intro + renderEngineeringSpace()
+  return html`${intro}
     <div class="space-toolbar">
       <div class="room-tabs">
         ${rooms.map((r) => html`<button data-room="${r.id}" class="${selectedRoom === r.id ? 'selected' : ''}">${r.name}</button>`).join('')}
@@ -839,6 +857,11 @@ function records() {
 
 
 function render() {
+  disposeEngineering?.()
+  disposeEngineering = undefined
+  if (page !== 'planning') { homeArrival?.dispose(); homeArrival = undefined }
+  disposeHome?.()
+  disposeHome = undefined
   planning.leave()
   intakeSession?.dispose()
   intakePreview?.dispose()
@@ -849,7 +872,22 @@ function render() {
   const pages = { overview, planning: planning.render, clarify, requirements, compare, space, records, vendor }
   if (!(page in pages)) page = 'overview'
   app.innerHTML = shell(pages[page]())
-  if (page === 'planning') planning.mount(document.querySelector<HTMLElement>('#room-planning')!, state.requirements)
+  if (page === 'overview') disposeHome = mountHomeScene(document.querySelector<HTMLElement>('.home-page')!, (keyboard, frame) => {
+    homeArrival?.dispose()
+    homeArrival = frame ? createHomeArrival(frame) : undefined
+    homeArrivalKeyboard = keyboard
+    navigate('planning')
+  })
+  if (page === 'planning') {
+    planning.mount(document.querySelector<HTMLElement>('#room-planning')!, state.requirements)
+    if (homeArrival) homeArrival.mount(document.querySelector<HTMLElement>('.planning-page')!, homeArrivalKeyboard)
+    else if (homeArrivalKeyboard) {
+      const heading = document.querySelector<HTMLElement>('#planning-title')!
+      heading.tabIndex = -1
+      heading.focus({ preventScroll: true })
+    }
+    homeArrivalKeyboard = false
+  }
   if (page === 'clarify') {
     intakePreview = mountIntakeSpacePreview(document.querySelector<HTMLElement>('.intake-space')!, previewFrom)
     previewFrom = undefined
@@ -896,7 +934,8 @@ function render() {
       navigation.clientWidth / 2 +
       activeNavigation.clientWidth / 2
   }
-  if (page === 'space') {
+  if (page === 'space' && spaceMode === 'engineering') disposeEngineering = mountEngineeringSpace(document.querySelector<HTMLElement>('.engineering')!)
+  if (page === 'space' && spaceMode === 'rooms') {
     const canvas = document.querySelector<HTMLElement>('#house-canvas')!
     house = createHoloView(canvas, {
       onRoomSelect: (id) => {
@@ -1003,6 +1042,11 @@ document.addEventListener('click', (e) => {
   }
   const id = target.dataset.id
   switch (action) {
+    case 'space-engineering':
+    case 'space-rooms':
+      spaceMode = action === 'space-engineering' ? 'engineering' : 'rooms'
+      render()
+      break
     case 'plan-current-room':
     case 'plan-whole-home':
       previewFrom = captureFloorplanHandoff()
@@ -1014,8 +1058,8 @@ document.addEventListener('click', (e) => {
       break
     case 'about':
       showDialog(
-        '关于这版明码',
-        `<p>这是可交互的网页 MVP，支持多区域 AI 需求共创、清单确认与版本发布；商家提交、核对和选择保留演示流程。</p><dl class="about-list"><dt>数据保存</dt><dd>需求、方案和 AI 草稿仅保留在本轮。刷新或重新打开会清空，可先导出项目。</dd><dt>AI 接入</dt><dd>需求共创已接入 AI，可按全局、区域和公共项拆分并追问；商家方案页面仍使用演示规则，不构成专业审查。</dd><dt>空间模型</dt><dd>固定示意户型与路线，不能用作实际施工图。</dd></dl>`,
+        '关于安居有数',
+        `<p lang="en">Dream Defined. Living Refined.</p><p>这是可交互的网页 MVP，支持多区域 AI 需求共创、清单确认与版本发布；商家提交、核对和选择保留演示流程。</p><dl class="about-list"><dt>数据保存</dt><dd>需求、方案和 AI 草稿仅保留在本轮。刷新或重新打开会清空，可先导出项目。</dd><dt>AI 接入</dt><dd>需求共创已接入 AI，可按全局、区域和公共项拆分并追问；商家方案页面仍使用演示规则，不构成专业审查。</dd><dt>空间模型</dt><dd>固定示意户型与路线，不能用作实际施工图。</dd></dl>`,
       )
       break
     case 'sample-brief':
@@ -1258,7 +1302,7 @@ document.addEventListener('click', (e) => {
     }
     case 'csv-template':
       download(
-        '明码商家方案模板.csv',
+        '安居有数商家方案模板.csv',
         '\uFEFF' +
           proposalCsv(
             latest()!.requirements.map((r) => ({
@@ -1370,7 +1414,7 @@ document.addEventListener('click', (e) => {
     }
     case 'export-scales':
       download(
-        '明码历史维度记录.json',
+        '安居有数历史维度记录.json',
         JSON.stringify(
           {
             archiveOnly: true,
@@ -1389,7 +1433,7 @@ document.addEventListener('click', (e) => {
       break
     case 'export':
       download(
-        '明码项目记录.json',
+        '安居有数项目记录.json',
         JSON.stringify(
           {
             exportedAt: now(),

@@ -1,14 +1,38 @@
 import { demoDrawingSvg, drawingBounds, type PlanningModel, type PlanningRoom } from './planning-floorplan'
 
-export function renderPlanningSource(model: PlanningModel) {
-  const sheet = demoDrawingSvg()
+export function renderPlanningSource(model: PlanningModel, editorial = false, active = true) {
+  const sheet = demoDrawingSvg(editorial)
   const [x,z,w,d] = drawingBounds(model)
   const marks = model.rooms.map(({ bounds: [u,v,rw,rd] }) =>
     `<rect x="${(u-x)/w*100}%" y="${(v-z)/d*100}%" width="${rw/w*100}%" height="${rd/d*100}%" fill="#42caca44" stroke="#117078"/>`).join('')
+  if (editorial) {
+    const arrow = '<svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 19 19 5M7 5h12v12"/></svg>'
+    const upload = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 16V3m-6 6 6-6 6 6M3 16v5h18v-5"/></svg>'
+    const download = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 3v13m-6-6 6 6 6-6M3 16v5h18v-5"/></svg>'
+    return `<div class="plan-entry-layout">
+      <div class="plan-entry-copy">
+        <h1 ${active ? 'id="planning-title"' : ''}>从图纸，<br><span>到你的空间。</span></h1>
+        <p>从平面图生成 3D 户型，再选一个房间开始规划。</p>
+        <div class="plan-entry-actions">
+          <button type="button" class="planning-primary" data-plan-step="build" ${model.rooms.length ? '' : 'disabled'}>生成立体户型${arrow}</button>
+          <div class="planning-drawing-actions">
+            <label class="planning-upload">${upload}上传图纸<input type="file" data-plan-upload accept="image/png,image/jpeg,image/webp" aria-label="上传户型图纸"></label>
+            ${model.drawing ? '<button type="button" class="planning-text" data-plan-step="demo">切回演示</button>' : `<a class="planning-text" download="安居有数-演示户型平面图.svg" href="data:image/svg+xml,${encodeURIComponent(sheet)}">${download}下载演示图纸</a>`}
+          </div>
+        </div>
+        <p class="plan-source-status" role="status" data-plan-status>${model.drawing ? '先标注房间，再生成概念模型。图纸只保留在本轮，刷新后清空。' : ''}</p>
+      </div>
+      <div class="planning-drawing-screen">
+        <div class="planning-drawing-toolbar"><h2>${model.drawing ? '上传的原始图纸' : '五区演示图纸'}</h2><span>比例未校准</span></div>
+        <div class="planning-paper">${model.drawing ? `<div class="planning-upload-paper" style="aspect-ratio:${model.drawingAspect}"><img src="${model.drawing}" alt="上传的户型图"><svg data-plan-mark-layer aria-label="拖动框选房间" role="img">${marks}<rect data-plan-selection fill="#92ad894d" stroke="#35594b"/></svg></div>` : sheet}</div>
+        ${model.drawing ? `<div class="planning-mark-tools"><p>在图上框选房间，或填写范围百分比。</p><div><label>房间名称<input data-mark-name maxlength="18" placeholder="例如：客厅"></label>${['左','上','宽','高'].map((label,i) => `<label>${label} %<input type="number" min="0" max="100" data-mark-coord="${i}" value="${i < 2 ? 10 : 35}"></label>`).join('')}<button type="button" class="planning-text" data-plan-step="mark">添加房间</button>${model.rooms.length ? '<button type="button" class="planning-text" data-plan-step="undo">撤销上一个</button>' : ''}</div><p>已标注 ${model.rooms.length} 个房间</p></div>` : ''}
+      </div>
+    </div>`
+  }
   return `<div class="planning-drawing-screen">
     <div class="planning-drawing-toolbar"><div><b>${model.drawing ? '上传的原始图纸' : '五区演示图纸'}</b><small>平面图 · 比例未校准</small></div>
     <div class="planning-drawing-actions"><label class="planning-upload">上传图纸<input type="file" data-plan-upload accept="image/png,image/jpeg,image/webp"></label>
-    ${model.drawing ? '<button type="button" class="planning-text" data-plan-step="demo">切回演示</button>' : `<a class="planning-text" download="明码-演示户型平面图.svg" href="data:image/svg+xml,${encodeURIComponent(sheet)}">下载演示图纸</a>`}</div></div>
+    ${model.drawing ? '<button type="button" class="planning-text" data-plan-step="demo">切回演示</button>' : `<a class="planning-text" download="安居有数-演示户型平面图.svg" href="data:image/svg+xml,${encodeURIComponent(sheet)}">下载演示图纸</a>`}</div></div>
     <div class="planning-paper">${model.drawing ? `<div class="planning-upload-paper" style="aspect-ratio:${model.drawingAspect};width:min(100%,660px,${model.drawingAspect!*490}px)"><img src="${model.drawing}" alt="上传的户型图"><svg data-plan-mark-layer aria-label="拖动框选房间" role="img">${marks}<rect data-plan-selection fill="#36bfc34d" stroke="#117078"/></svg></div>` : sheet}</div>
     ${model.drawing ? `<div class="planning-mark-tools"><p>在图上框选一个房间，或填写范围百分比，再添加房间。</p><div><label>房间名称<input data-mark-name maxlength="18" placeholder="例如：客厅"></label>${['左','上','宽','高'].map((label,i) => `<label>${label} %<input type="number" min="0" max="100" data-mark-coord="${i}" value="${i < 2 ? 10 : 35}"></label>`).join('')}<button type="button" class="planning-text" data-plan-step="mark">添加房间</button>${model.rooms.length ? '<button type="button" class="planning-text" data-plan-step="undo">撤销上一个</button>' : ''}</div><p>已标注 ${model.rooms.length} 个房间</p></div>` : ''}
     <div class="planning-drawing-footer"><p role="status" data-plan-status>${model.drawing ? '依据标注生成概念模型，墙高和开口为示意。图纸保留至本次页面关闭或刷新。' : '预览原图，生成与这张图纸对应的立体户型。'}</p><button type="button" class="planning-primary" data-plan-step="build" ${model.rooms.length ? '' : 'disabled'}>生成立体户型</button></div>

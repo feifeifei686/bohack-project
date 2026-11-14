@@ -320,9 +320,9 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
   function exportDocument(markdown: boolean) {
     if (!state.result) return
     const doc = intakeDocument(state)
-    if (!markdown) { download('明码需求草稿.json', JSON.stringify({ ...doc, exportedAt: new Date().toISOString(), status: 'draft' }, null, 2), 'application/json'); return }
+    if (!markdown) { download('安居有数需求草稿.json', JSON.stringify({ ...doc, exportedAt: new Date().toISOString(), status: 'draft' }, null, 2), 'application/json'); return }
     const md = (value: string) => value.replace(/[\\`*_{}\[\]<>#]/g, '\\$&')
-    const lines = ['# 明码需求草稿', '', '状态：待用户发布，非施工确认。', '', `原始表达：${md(state.brief)}`, '']
+    const lines = ['# 安居有数需求草稿', '', '状态：待用户发布，非施工确认。', '', `原始表达：${md(state.brief)}`, '']
     if (doc.projectContext?.length) {
       lines.push('## 项目背景', '')
       for (const entry of doc.projectContext) lines.push(`### ${projectContextLabels[entry.id]}`, '', md(entry.text), '', `状态：${entry.confirmed ? '用户已核对背景' : '待用户核对背景'}；不代表现场或工程条件已确认。`, '')
@@ -335,7 +335,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
       lines.push('')
     }
     if (doc.result.conflicts.length) lines.push('## 待处理取舍', '', ...doc.result.conflicts.map(x => `- ${md(x.message)}`), '')
-    download('明码需求草稿.md', lines.join('\n'), 'text/markdown;charset=utf-8')
+    download('安居有数需求草稿.md', lines.join('\n'), 'text/markdown;charset=utf-8')
   }
   async function submitAnswer(skip = false) {
     if (busy) return
@@ -403,7 +403,7 @@ export function mountIntake(container: HTMLElement, options: Options): { dispose
       }
       case 'export-json': exportDocument(false); break
       case 'export-md': exportDocument(true); break
-      case 'export-raw': download('明码原始访谈记录.txt', rawStored, 'text/plain;charset=utf-8'); break
+      case 'export-raw': download('安居有数原始访谈记录.txt', rawStored, 'text/plain;charset=utf-8'); break
       case 'new':
         if ((state.brief || state.result || rawStored) && !window.confirm('开始新的访谈会替换这份访谈草稿。已发布的需求版本不会改变。需要留存时，请先导出文档。')) return
         invalidateFlight(); state = newIntakeState('', options.projectContext ?? state.projectContext ?? []); rawStored = ''; storageBlocked = false; storageError = ''; error = ''; info = ''; filter = 'all'; persist(); render(); break
