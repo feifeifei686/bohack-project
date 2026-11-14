@@ -1,11 +1,36 @@
 import type { IntakeItem, IntakeQuestion } from './intake-contract.ts'
 import { adoptionIssues, editIntakeItem, type IntakeState } from './intake-state.ts'
 
+export const nonAnswerChoices = ['暂不确定', '以上选项都不适合']
+/** The owner flow always has a selectable exit, including malformed or older AI questions. */
+export function choiceOnlyQuestion(question: IntakeQuestion): IntakeQuestion {
+  const choices = question.options.map(option => /其他|自行填写|请填写|请补充|请描述|自定义/.test(option) ? nonAnswerChoices[1] : option)
+  return { ...question, options: [...new Set([...choices.filter(option => option.trim() && !nonAnswerChoices.includes(option)).slice(0, 6), ...nonAnswerChoices])] }
+}
+
+export function choiceOnlyAnswer(question: IntakeQuestion, selected: string[]) {
+  const values = [...new Set(selected)].filter(choice => question.options.includes(choice))
+  const deferred = values.find(choice => nonAnswerChoices.includes(choice))
+  return { answer: deferred || (question.allowMultiple ? values : values.slice(0, 1)).join('、'), disposition: deferred ? 'deferred' as const : 'answered' as const }
+}
+
 export function questionnaireReply(question: IntakeQuestion, answer = ''): IntakeState['reply'] {
+  if (question.options.includes(answer)) return { questionId: question.id, selected: [answer], free: '' }
   const [choices, ...supplement] = answer.split('；补充：')
-  const selected = choices.split('、').filter(Boolean)
-  const wasSelection = selected.length > 0 && selected.every(value => question.options.includes(value))
-  return { questionId: question.id, selected: wasSelection ? selected : [], free: wasSelection ? supplement.join('；补充：') : answer }
+  const options = [...question.options].filter(Boolean).sort((a, b) => b.length - a.length)
+  const failed = new Set<string>()
+  function match(text: string): string[] | undefined {
+    if (failed.has(text)) return
+    for (const option of options) {
+      if (text === option) return [option]
+      if (!question.allowMultiple || !text.startsWith(option + '、')) continue
+      const rest = match(text.slice(option.length + 1))
+      if (rest) return [option, ...rest]
+    }
+    failed.add(text)
+  }
+  const selected = match(choices)
+  return { questionId: question.id, selected: selected || [], free: selected ? supplement.join('；补充：') : answer }
 }
 
 /** Reuse the adoption rules; a friendly confirmation must never bypass them. */

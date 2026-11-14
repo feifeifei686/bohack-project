@@ -1,0 +1,162 @@
+{
+  "date": "2026-11-15",
+  "feature": "Room-specific multiple-choice intake entry",
+  "scope": "Room-specific choices with optional per-question details, AI follow-up and explicit confirmation",
+  "automated": {
+    "frontendTests": {
+      "passed": 139,
+      "failed": 0,
+      "newPreferenceTests": 8
+    },
+    "build": "TypeScript checks for all three variants and Vite production build passed",
+    "designDetector": {
+      "findings": 0,
+      "targets": [
+        "shared/intake-preferences-ui.ts",
+        "shared/intake-preferences.css"
+      ]
+    }
+  },
+  "browser": {
+    "flowScript": "mingma-lab/scripts/browser-intake-preferences.js",
+    "flowAssertionsPassed": 25,
+    "edgeScript": "mingma-lab/scripts/browser-intake-preferences-edge.js",
+    "edgeAssertionsPassed": 8,
+    "desktopWidth": 1440,
+    "mobileWidth": 390,
+    "mobileDocumentWidth": 390,
+    "keyboard": "ArrowRight changes the 1-5 radio selection and preserves focus",
+    "reload": "Restores question 4 and its chosen value from the project draft",
+    "legacy": "Old free-text draft retained as editable optional note",
+    "longNote": "Combined input over 4000 characters is blocked; full optional note remains restorable",
+    "consoleErrorsOnDeployedFlow": 0
+  },
+  "httpIntegration": {
+    "simulated": "Real API on 5203 and Vite on 5213 against existing Postman DeepSeek simulation on 5204; one intake request observed at the simulated provider",
+    "cliStatus": "Installed Postman CLI does not expose status; simulation listening event and request counter verified instead",
+    "live": {
+      "pageStatus": 200,
+      "intakeStatus": 200,
+      "providerModel": "deepseek-flash",
+      "input": "Synthetic bathroom choices: local refresh, floor feel 4/5, cleaning importance 5/5, slip importance unknown, keep doors/windows",
+      "result": "3 requirements and 2 selectable follow-up questions; 4/5 and 5/5 retained as subjective preferences; unknown slip preference remains pending",
+      "adoption": "Not adopted or published; QA browser draft only",
+      "target": "Configured local/LAN deployment"
+    }
+  },
+  "limits": [
+    "Room names select deterministic templates; recognized furniture supplies unconfirmed retention options.",
+    "1-5 values express user preferences, not physical measurements or certified performance.",
+    "One live synthetic request is connectivity and semantics evidence, not an accuracy benchmark.",
+    "Drafts remain per browser and website origin; no cross-device synchronization added."
+  ],
+  "deepening": {
+    "date": "2026-11-15",
+    "groups": [
+      "生活与现状",
+      "功能细节",
+      "取舍与保留"
+    ],
+    "fullPathSamples": {
+      "卫生间": 29,
+      "厨房": 30,
+      "卧室": 30,
+      "客厅": 28,
+      "餐厅": 28,
+      "玄关": 25,
+      "阳台": 24,
+      "书房": 29,
+      "全屋与公共需求": 26
+    },
+    "sampleNote": "Deterministic test paths enabling all goals and relevant dependent branches, not a fixed question count for every user.",
+    "frontendTests": {
+      "passed": 146,
+      "failed": 0
+    },
+    "browserFlowAssertions": 32,
+    "browserEdgeAssertions": 8,
+    "kitchenBrowserPathQuestions": 23,
+    "mobile": {
+      "viewport": 390,
+      "documentWidth": 390,
+      "groupTouchHeight": 63
+    },
+    "migration": "Legacy numeric cursors migrate to stable question IDs without discarding answers or notes. New questions remain unanswered.",
+    "serialization": "Only applicable choices are serialized. All tested fully explored paths fit the existing 4000-character brief limit before optional notes.",
+    "integration": "Real API and frontend against existing Postman provider simulation; one intake request observed.",
+    "live": {
+      "status": 200,
+      "providerModel": "deepseek-flash",
+      "syntheticInputChars": 636,
+      "requirements": 7,
+      "followUpChoices": 2,
+      "observed": [
+        "小家电取用与原位使用",
+        "洗碗机清洗锅具",
+        "清洗到备菜与两人操作",
+        "地面清洁与光脚脚感",
+        "保留门窗及通道约束"
+      ],
+      "limit": "Single synthetic example; all generated requirements still need user review."
+    },
+    "deployedLegacyResume": {
+      "question": "floor-hardness",
+      "value": "4",
+      "oldPosition": 4,
+      "newPosition": 6,
+      "totalQuestions": 15,
+      "answered": 7,
+      "consoleErrors": 0
+    }
+  },
+  "choiceOnly": {
+    "date": "2026-11-15",
+    "frontendTestsPassed": 150,
+    "browserFlowAssertionsPassed": 41,
+    "browserEdgeAssertionsPassed": 13,
+    "writingFieldsInPublicFirstQuestion": 0,
+    "fullFlow": "Room selection, 23 preference questions, AI follow-up, requirement confirmation and adoption completed without typing in the isolated Postman-backed app.",
+    "historicalText": "Read-only, with a choice to include or exclude; never silently deleted.",
+    "pendingDecisions": "Continue choice questions or defer; unresolved owner decisions remain blocked.",
+    "deployment": {
+      "scope": "frontend-only; backend service, credentials and nginx configuration retained",
+      "checks": [
+        {
+          "path": "/",
+          "status": 200,
+          "matchesBuild": true
+        },
+        {
+          "path": "./assets/lucid-RDS2bFRd.js",
+          "status": 200,
+          "matchesBuild": true
+        },
+        {
+          "path": "./assets/lucid-DnWS5Pv8.css",
+          "status": 200,
+          "matchesBuild": true
+        },
+        {
+          "path": "/api/health",
+          "status": 200
+        }
+      ],
+      "target": "Configured production deployment",
+      "rollbackAvailable": true
+    },
+    "actualUserTab": "Reloaded the existing production questionnaire tab and verified the bathroom multiselect question; the old essay input is absent.",
+    "publicLiveAI": {
+      "status": 200,
+      "requiresHumanConfirmation": true,
+      "items": 5,
+      "questions": 2
+    }
+  },
+  "historyNote": "Earlier sections record verification at previous iterations.",
+  "perQuestionDetails": {
+    "frontendTestsPassed": 152,
+    "browserFlowAssertionsPassed": 64,
+    "browserEdgeAssertionsPassed": 13,
+    "verified": "A short answer can supplement or replace a selection, persists on navigation and reaches the intake request. Blank answers advance as pending. The AI follow-up remains selectable."
+  }
+}

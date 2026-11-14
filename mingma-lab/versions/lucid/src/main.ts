@@ -551,7 +551,7 @@ async function advanceWorkflow() {
       case 'clarify':
         insightVersion = null
         intakeEntry = { focus: true }
-        navigateWithWorkflowHint('clarify', '#intake-brief', state.requirements.length ? '项目背景已变化，请整理并重新确认这轮需求。' : '先写一句你的改造想法，再点下方“下一步”。')
+        navigateWithWorkflowHint('clarify', '.preference-fields, #intake-expression-title', state.requirements.length ? '项目背景已变化，请重新核对本轮选择。' : '先选择本次希望改善的部分，再点下方“下一步”。')
         break
       case 'publish': clickWorkflowControl('[data-action="publish"]'); break
       case 'compare': insightVersion = null; workflowChoosingProposal = false; navigate('compare'); break
@@ -1392,6 +1392,9 @@ function render() {
       storage: activeRoomWork() ? ((room: RoomWork) => ({ getItem: () => room.draft, setItem: (_key: string, value: string) => { room.draft = value; scheduleProjectSave() } }))(activeRoomWork()!) : demoIntakeStorage,
       storageStatus: projectSaveText,
       spatialModel: planning.model(),
+      activeRoomId: state.activeRoomId,
+      activeRoomName: activeRoomWork()?.name,
+      onChooseRoom: enterRoomWork,
       onSpatialFocus: intakePreview.update,
       onFirstExpression: intakePreview.acknowledgeBrief,
       onNotice: toast,
