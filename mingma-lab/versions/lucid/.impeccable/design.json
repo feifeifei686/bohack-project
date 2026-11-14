@@ -1,0 +1,40 @@
+{
+  "name": "安居有数",
+  "slogan": "Dream Defined. Living Refined.",
+  "platform": "web",
+  "tokens": {
+    "background": "#faf7f2",
+    "ink": "#37363e",
+    "muted": "#6d6875",
+    "accent": "#5c557e",
+    "planningBackground": "#faf7f2",
+    "planningAccent": "#575674",
+    "displayFont": "Noto Serif SC",
+    "bodyFont": "system sans-serif"
+  },
+  "surfaces": {
+    "overview": "Experience: luminous animated house",
+    "planning": "Operate: shared luminous workspace, reference split layout",
+    "workspace": "Operate: cream and violet task sheets"
+  },
+  "motion": {
+    "buildSeconds": 7,
+    "maxFps": 30,
+    "cameraZoom": 1.27,
+    "reducedMotion": "complete static model",
+    "planningTransition": {
+      "overheadSeconds": 1.8,
+      "landingSeconds": 1.3,
+      "method": "retained rendered frame aligned to destination SVG footprint; simultaneous crossfade"
+    },
+    "cameraSweepDegrees": {
+      "yaw": 52,
+      "pitch": 18
+    },
+    "buildRhythm": "fast shell at1.6s; slower furnishings to6.2s, details to6.8s, light routes to6.95s",
+    "cameraEntryZoom": 1.12
+  },
+  "assets": [
+    "/assets/home/luminous-atmosphere.webp"
+  ]
+}

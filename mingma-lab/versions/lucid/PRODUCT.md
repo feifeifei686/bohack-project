@@ -1,4 +1,6 @@
-# 明码家装协同 MVP
+# 安居有数
+
+Dream Defined. Living Refined.
 
 <!-- impeccable:product-schema 1 -->
 
