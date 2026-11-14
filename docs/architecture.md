@@ -1,24 +1,24 @@
 # 当前实现结构
 
-明码包含静态前端、同源网关和独立 AI 服务。`mingma-lab` 使用 Vite、TypeScript 与 Tailwind CSS 构建统一展厅和三套界面；三版的 `#clarify` 共用真实 AI 需求获取模块，调用 `mingma-api` 的 `/api/ai/intake`。方案比对与商家修订界面仍使用本地规则和模拟公司。当前没有数据库或真实商家通信服务。
+明码包含静态前端、同源网关和独立 AI 服务。`mingma-lab` 使用 Vite、TypeScript 与 Tailwind CSS 构建澄境；`#clarify` 挂载 AI 需求获取模块，调用 `mingma-api` 的 `/api/ai/intake`。方案比对与商家修订界面仍使用本地规则和模拟公司。当前没有数据库或真实商家通信服务。
 
 ## 工程之间的关系
 
 | 工程 | 当前作用 | 安装与启动位置 |
 | --- | --- | --- |
-| `mingma-lab` | 当前主工程：设计展厅和三套完整流程 | 在该目录执行 `npm ci`、`npm run dev` |
+| `mingma-lab` | 当前主工程：澄境与历史设计源码 | 在该目录执行 `npm ci`、`npm run dev` |
 | `mingma-mvp` | 早期单版 MVP，保留迭代历史 | 在该目录安装；开发可使用 `npm run dev -- --port 5180` |
 | `mingma-3d` | 早期 Three.js / WebGL 户型线路实验 | 在该目录安装；开发可使用 `npm run dev -- --port 5178` |
 | `mingma-api` | Node.js + TypeScript + Zod 的无状态 AI 接口 | 在该目录安装、配置 `.env` 后 `npm start`；默认 5199 |
 
-各目录是独立 npm 工程，不是 npm workspace。`mingma-lab/versions/` 下的三版由主工程统一构建，不应各自启动 Vite。
+各目录是独立 npm 工程，不是 npm workspace。`mingma-lab` 构建澄境首页和旧澄境链接的跳转页。
 
 ## 主工程文件地图
 
 | 路径（相对 `mingma-lab`） | 职责 |
 | --- | --- |
-| `index.html`、`gallery.css`、`gallery.js` | 展厅、三版入口、截图和独立验收清单 |
-| `vite.config.ts` | Tailwind 插件、相对资源路径、展厅与三个版本的构建入口 |
+| `index.html` | 澄境首页 |
+| `vite.config.ts` | Tailwind 插件、相对资源路径、澄境与旧链接跳转入口 |
 | `versions/<版本>/src/main.ts` | 页面模板、hash 导航、事件处理、状态与本地存储 |
 | `shared/intake-ui.ts`、`intake-ui.css` | 三版共享的表达、追问、编辑、确认和导出界面 |
 | `shared/intake-state.ts`、`intake-state.test.ts` | 访谈草稿、建议采纳、确认门槛、冲突与迟到响应保护 |
@@ -57,11 +57,11 @@ flowchart TD
     Revise --> Proposal
     Findings --> Select[用户选择]
     Select --> Archive[需求、方案与待办快照]
-    Draft --> Storage[浏览器 localStorage]
+    Draft --> Storage[本轮演示内存]
     Archive --> Storage
 ```
 
-三版分别使用 `mingma-atmosphere-*`、`mingma-lucid-*` 和 `mingma-atelier-*` 命名空间。访谈状态独立保存于各版 `*-intake-v2` 键；项目保存当前需求与 `projectContext`，商家草稿另存。旧 `*-dimensions-v1` 键保留作只读历史，不再作为新的填写入口或完成状态来源。不同浏览器、网址或端口不会自动共享这些数据。访谈可导出 Markdown 或 JSON，项目仍可导出 JSON；目前没有服务端备份或完整跨设备导入流程。
+澄境的访谈、项目背景、商家草稿和方案版本只保留在当前页面内存中。刷新或重新打开会清空。访谈可导出 Markdown 或 JSON，项目可导出 JSON。
 
 ## 统一需求页与背景来源
 

@@ -1,26 +1,21 @@
-# 明码 · 家装需求与方案协作
+# 明码 · 澄境
 
-把生活化的装修想法变成双方确认的需求，再逐条看清商家方案如何回应。
+明码是「艾可思 · AI 家装服务平台」赛题的硬装协作 MVP。业主从户型和生活需求出发，通过 AI 多轮追问形成可核对的需求清单，再逐项查看装修方案如何回应。
 
-明码是面向「艾可思 · AI 家装服务平台」赛题的 MVP。澄境的**需求共创**已接入 DeepSeek：从生活化表达和区域选择开始，动态追问，形成全局、区域、公共项与待确认清单，再由用户编辑、逐项确认并采用。商家方案比对、修订与选择仍使用本地规则和模拟公司，保留版本与原文证据。
+- **从户型开始** · 用演示图纸或上传图片并手动标注房间。看平面图成形为立体沙盘，点选房间进入区域规划。
+- **和 AI 梳理需求** · DeepSeek 根据表达和项目背景追问，整理全屋、分区和公共项。沙盘缩入右上角，随问题高亮对应空间。整理成功后自动定位到新追问或草稿。
+- **对照方案并确认** · 业主确认并发布清单，模拟商家逐项回应。页面根据原文标出覆盖、遗漏和冲突，支持反馈、修订及版本回看。
 
-**推荐入口：[`mingma-lab`](mingma-lab/README.md)** · [演示步骤](docs/demo-guide.md) · [产品需求文档](docs/明码产品需求文档_v1.0.pdf) · [实现结构](docs/architecture.md) · [协作指南](CONTRIBUTING.md)
+当前部署直达「澄境」。项目与 AI 结果只保留在本轮，刷新后清空，演示结束前可导出项目。商家回应采用模拟数据和本地规则。
 
-## 界面设计
-
-澄境是当前部署入口，含 8 个功能页面。演示数据仅在本轮保留，刷新后清空。下方为三套设计的历史预览。
-
-| 雾屿 Atmosphere | 澄境 Lucid | 筑序 Atelier |
-| --- | --- | --- |
-| ![雾屿桌面实际截图](mingma-lab/public/previews/atmosphere-desktop.webp) | ![澄境桌面实际截图](mingma-lab/public/previews/lucid-desktop.webp) | ![筑序桌面实际截图](mingma-lab/public/previews/atelier-desktop.webp) |
-| 自然摄影、烟色磨砂玻璃、生活便签与悬浮导航 | 浅色光学玻璃、中央空间画布、区域需求抽屉 | 建筑方案册、纸面档案、章节导航与证据批注 |
-| [版本说明](mingma-lab/versions/atmosphere/README.md) · [手机首屏](mingma-lab/public/previews/atmosphere-mobile.webp) | [版本说明](mingma-lab/versions/lucid/README.md) · [手机首屏](mingma-lab/public/previews/lucid-mobile.webp) | [版本说明](mingma-lab/versions/atelier/README.md) · [手机首屏](mingma-lab/public/previews/atelier-mobile.webp) |
+[运行指南](docs/local-deployment.md) · [演示步骤](docs/demo-guide.md) · [产品需求文档](docs/明码产品需求文档_v1.0.pdf) · [架构](docs/architecture.md) · [协作指南](CONTRIBUTING.md)
 
 ## 体验流程
 
 ```mermaid
 flowchart LR
-    A[生活化需求与区域选择] --> B[AI复述 拆分与动态追问]
+    Z[图纸与立体户型] --> A[生活化需求与区域选择]
+    A --> B[AI复述 拆分与动态追问]
     B --> C[用户编辑 确认并采用草稿]
     C --> P[用户主动发布需求 R1]
     P --> D[模拟商家逐项提交方案]
@@ -83,7 +78,7 @@ npm run preview -- --port 5190
 
 仓库的 [GitHub Actions](https://github.com/feifeifei686/bohack-project/actions) 配置会检查前端工程和 AI 服务，运行本地自动测试及构建；不会使用真实模型密钥。成功运行后，在该次运行的 **Artifacts** 中下载 `mingma-preview-<提交哈希>`。下载需要仓库访问权限。
 
-产物包含已构建体验包、设计展厅源码包和校验清单。静态体验包可按包内 README 使用 Python 3 启动浏览，无需 npm；它不包含模型密钥或 API 服务，AI 共创需另行提供同源 `/api`。服务不可用时会保留输入并提示错误，不静默返回演示答案。产物保留 14 天；如已过期，可重新运行工作流或从源码构建。仓库当前不提供公开在线演示站点。
+产物包含已构建体验包、前端源码包和校验清单。静态体验包可按包内 README 使用 Python 3 启动浏览，无需 npm；它不包含模型密钥或 API 服务，AI 共创需另行提供同源 `/api`。服务不可用时会保留输入并提示错误，不静默返回演示答案。产物保留 14 天；如已过期，可重新运行工作流或从源码构建。仓库当前不提供公开在线演示站点。
 
 ## 项目结构
 
