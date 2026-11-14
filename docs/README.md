@@ -1,28 +1,39 @@
 # 文档索引
 
-安居有数当前聚焦硬装需求澄清、商家方案逐项回应、证据核对和版本确认，slogan 为「Dream Defined. Living Refined.」。推荐先运行 `mingma-lab`，再结合以下文档理解产品。
+安居有数当前以澄境为主入口，完成「户型 → 分房间共创 → 汇总发布 → Flash 分析 → 方案核对 → 确认与导出」的协作流程。从[项目首页](../README.md)了解范围，按[演示指南](demo-guide.md)体验。
 
-| 文档 | 用途 | 范围 |
-| --- | --- | --- |
-| [产品需求文档 v1.0 · PDF](明码产品需求文档_v1.0.pdf) | 队友与评委阅读产品目标、流程和验收设计 | 包含规划能力，不代表全部已经实现 |
-| [产品需求文档 v1.0 · Word](明码产品需求文档_v1.0.docx) | 编辑产品文档 | 与同版本 PDF 对应 |
-| [实现结构](architecture.md) | 找到前端入口、规则、空间模型与 AI 服务 | 对照当前前端和服务端源码 |
-| [需求获取与追问设计 v2](requirements-intake-v2.md) | 四组需求、拆分维度、量化表达与后续追问规则 | 核心流程已接入三版需求共创，保留后续扩展边界 |
-| [户型图上传与立体模型设计](floorplan-model-design.md) | 上传、识别、校对及需求空间关联 | AI 识别房间、门窗与可见家具已实现；逐点轮廓编辑、尺度校准和模型版本处理仍为设计 |
-| [AI 接口契约](api/README.md) | intake、floorplan 与原四个接口的字段、错误、证据和版本约束 | 需求共创和户型识别已接页面；商家审查界面仍采用本地规则 |
-| [户型识别验证](floorplan-recognition-verification.json) | 真实图纸、依赖模拟、动态模型与局域网检查 | 候选识别数量不代表几何准确率 |
-| [分步问卷验证](questionnaire-workflow-verification.json) | 逐题回答、逐条确认、项目导航和演示方案衔接 | 使用本地模型依赖模拟的浏览器验证 |
-| [风险评估说明](risk-assessment.md)与[验证记录](risk-assessment-verification.json) | 八维检查、原文依据、核实安排、复评与确认快照 | 辅助协作检查，不代替专业鉴定 |
-| [首页与工程预览验证](ui-transition-verification.json) | 首页过渡、六层工程预览、键盘与 WebGL 降级 | 首页与工程预览的阶段记录；减少动态效果仅源码核查 |
-| [我的需求整合验证](requirements-unification-verification.json) | 清单与维度整合、背景迁移、接口和部署验证 | 上一轮整合记录 |
-| [需求共创初版验证](intake-release-verification.json) | 前一轮需求共创的页面、接口和部署结果 | 有日期的历史记录 |
-| [早期 AI 验证记录](api/verification.json) | 原四接口的本地测试、依赖模拟和真实调用证据 | 有日期的历史记录，不代替本轮验证 |
-| [演示与验收指南](demo-guide.md) | 运行演示、复现方案差异和检查边界 | 当前 `mingma-lab` 的可操作范围 |
-| [本机部署说明](local-deployment.md) | macOS 双击启动、停止、更新与查看日志 | 静态前端与同源 AI 接口，默认仅本机访问 |
-| [思维导图与闭环](../diagrams/README.md) | 查看区域—项目—决策的总体结构 | 包含「日新」后续规划 |
-| [历史验收摘要](../mingma-lab/review/verification.json) | 查看上一轮规则、浏览器与视觉验证记录 | 有日期和验证范围，不替代当前 CI |
-| [协作指南](../CONTRIBUTING.md) | 分支、PR、测试和应保持的业务规则 | 当前仓库工作方式 |
+## 使用与实现
 
-三版需求共创已调用 DeepSeek，支持多区域表达、动态追问、四组草稿、人工编辑、建议采纳、逐项确认和采用；澄境以分步问卷呈现，并随项目进度解锁后续页面。“我的需求”将清单、派生待确认、项目背景和只读旧记录集中在一处，背景保存后会随下一次 AI 梳理传入。上传户型图后可自动识别房间、门窗和可见家具，校对后生成轴测概念模型；六层工程预览仍是独立示意，未关联上传图纸或商家方案。商家协作与核对使用模拟公司及本地规则；真实商家账户、数据库、任意文档解析与自动学习尚未实现。报价和价格比较不在产品范围内。
+| 文档 | 阅读内容 |
+| --- | --- |
+| [本机部署](local-deployment.md) | macOS 启停、更新、动态局域网地址及日志 |
+| [演示与验收](demo-guide.md) | 主要流程、刷新恢复、版本隔离和能力边界 |
+| [实现结构](architecture.md) | 工程入口、状态与存储、AI 请求和网关 |
+| [分房间共创](room-work.md) | 独立访谈、问卷续接、保存与总清单 |
+| [底部操作栏](workflow-dock.md) | 下一步、缺项定位、焦点和忙碌状态 |
+| [Flash 需求图谱](requirement-insight.md) | 发布后分析、原文关联、版本与失败重试 |
+| [报告导出](report-export.md) | P1 / P2、分房间需求、证据与打印 PDF |
+| [风险评估](risk-assessment.md) | 八维检查、原文、处理安排与复评 |
+| [AI 接口契约](api/README.md) | intake、floorplan、requirement-insight 与兼容接口 |
+| [协作指南](../CONTRIBUTING.md) | 分支、验证、存储与用户确认规则 |
 
-风险评估独立栏目已接入澄境。见[实现说明](risk-assessment.md)与[验证记录](risk-assessment-verification.json)，涵盖八维展示、问题处理、复评、确认检查点及局域网回归。
+项目保存在当前浏览器同一来源的 IndexedDB，刷新后可继续；没有云端账户或跨设备同步。墙体性质需手工标注。商家回应仍为模拟数据和本地文字规则，真实 AI 已用于需求共创、户型识别与发布后分析。
+
+## 产品目标与设计
+
+| 文档 | 范围 |
+| --- | --- |
+| 产品需求文档 v1.0：[PDF](明码产品需求文档_v1.0.pdf) / [Word](明码产品需求文档_v1.0.docx) | 完整产品目标，含未实现规划 |
+| [需求获取与追问设计 v2](requirements-intake-v2.md) | 需求分类、表达与后续追问设计 |
+| [户型模型设计](floorplan-model-design.md) | 上传、识别、校对和空间关联；逐点编辑、尺寸校准仍有未实现项 |
+| [思维导图与闭环](../diagrams/README.md) | 总体协作结构，含后续「日新」规划 |
+
+## 验证记录
+
+记录只证明其日期和范围内的检查，不替代当前提交的测试或 [GitHub Actions](https://github.com/feifeifei686/bohack-project/actions)。功能文档中的本机临时输出路径不保证随仓库分发。
+
+- [项目保存与体验](project-experience-verification.json)、[墙体视图](wall-demolition-verification.json)。
+- [户型识别](floorplan-recognition-verification.json)、[分步问卷](questionnaire-workflow-verification.json)、[风险评估](risk-assessment-verification.json)。
+- 历史阶段记录：[首页与工程预览](ui-transition-verification.json)、[需求页整合](requirements-unification-verification.json)、[需求共创初版](intake-release-verification.json)、[早期 API](api/verification.json)、[早期设计版本验收](../mingma-lab/review/verification.json)。
+
+模拟通过不等于真实模型准确率，单次真实调用不构成固定性能承诺。浏览器、视觉与模型调用验证应分别阅读。

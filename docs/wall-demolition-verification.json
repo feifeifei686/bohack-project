@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-14",
+  "scope": "墙体拆除 UI：整体、按房间及单段展开",
+  "automated": {
+    "frontend": {
+      "passed": 95,
+      "failed": 0
+    },
+    "typecheckAndBuild": "passed",
+    "newGeometryCases": [
+      "公共墙去重并保留相邻房间关联",
+      "门洞范围不生成墙段",
+      "三种模式只影响目标墙段",
+      "中心位置的展开偏移保持有效"
+    ],
+    "designDetectorFindings": 0
+  },
+  "browser": {
+    "demoInteractionChecks": 17,
+    "customModelChecks": 4,
+    "checks": [
+      "整体/按房间/单段展开",
+      "滑杆连续展开",
+      "键盘选墙",
+      "拟拆除标记、拆前/拆后与合拢复原",
+      "返回原模型且不删除源墙体",
+      "再次进入保留本轮标记",
+      "清空标记",
+      "手机390px无横向溢出",
+      "空间预览栏目入口",
+      "自定义识别户型使用自身墙线及开口"
+    ],
+    "reducedMotion": "源码支持直接落到目标状态；浏览器CDP媒体模拟未获工具支持，未声称完成浏览器模拟验证"
+  },
+  "deployment": {
+    "command": "node scripts/local-deploy.mjs update",
+    "url": "http://<LAN-IP>:5188/#planning"
+  },
+  "limits": [
+    "表示改造意向，不判断墙体承重或实际可拆性",
+    "不改写原始户型，不自动发布需求",
+    "标记仅在本轮页面保留，换图或修改模型后重置",
+    "当前未将墙段标记写入项目导出"
+  ],
+  "browserScript": "mingma-lab/scripts/browser-wall-demolition.js",
+  "structuralAnnotations": {
+    "initialState": "unknown; no load-bearing inference",
+    "types": [
+      "bearing",
+      "partition",
+      "unknown"
+    ],
+    "provenance": "Manual, unverified, optional escaped evidence note",
+    "guard": "Bearing annotation clears removal intent and blocks disabled-button bypass at event handler",
+    "frontendTestsPassed": 97,
+    "browserChecksPassed": 15,
+    "legacyBrowserChecksPassed": 17,
+    "responsive": {
+      "viewport": 390,
+      "scrollWidth": 390
+    },
+    "designDetectorFindings": 0,
+    "script": "mingma-lab/scripts/browser-wall-structure.js"
+  }
+}
