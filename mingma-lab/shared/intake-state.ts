@@ -73,7 +73,7 @@ function validAnswer(v: unknown): v is IntakeAnswer {
 }
 export function restoreIntakeState(raw: string): IntakeState {
   const value: unknown = JSON.parse(raw)
-  if (!record(value) || value.schema !== 2 || !str(value.brief, 4000) || !strings(value.areas, 12) || !Array.isArray(value.answers) || value.answers.length > 40 || !value.answers.every(validAnswer) || (value.result !== null && !validResult(value.result)) || !inEnum(value.stage, ['express', 'refine', 'draft']) || !strings(value.acceptedSuggestionIds, 30) || !strings(value.reviewedIds, 30) || !strings(value.editedIds, 30) || typeof value.needsAnalysis !== 'boolean' || typeof value.replaceAcknowledged !== 'boolean' || typeof value.revision !== 'number' || !Number.isSafeInteger(value.revision) || !record(value.reply) || !str(value.reply.questionId) || !strings(value.reply.selected, 8) || !str(value.reply.free, 2000)) throw new Error('访谈记录格式不兼容')
+  if (!record(value) || value.schema !== 2 || !str(value.brief, 4000) || !strings(value.areas, 12) || !Array.isArray(value.answers) || !value.answers.every(validAnswer) || (value.result !== null && !validResult(value.result)) || !inEnum(value.stage, ['express', 'refine', 'draft']) || !strings(value.acceptedSuggestionIds, 30) || !strings(value.reviewedIds, 30) || !strings(value.editedIds, 30) || typeof value.needsAnalysis !== 'boolean' || typeof value.replaceAcknowledged !== 'boolean' || typeof value.revision !== 'number' || !Number.isSafeInteger(value.revision) || !record(value.reply) || !str(value.reply.questionId) || !strings(value.reply.selected, 8) || !str(value.reply.free, 2000)) throw new Error('访谈记录格式不兼容')
   const state = value as unknown as IntakeState
   state.projectContext = normalizeProjectContext(value.projectContext ?? [])
   if (!state.result) state.stage = 'express'
@@ -81,7 +81,35 @@ export function restoreIntakeState(raw: string): IntakeState {
   return state
 }
 export function toIntakeRequest(state: IntakeState, mode: 'refine' | 'draft' = 'refine'): IntakeRequest {
-  return { brief: state.brief.trim(), areas: unique(state.areas.map(x => x.trim()).filter(Boolean)), answers: copy(state.answers), previousItems: copy(state.result?.items || []), projectContext: copy(state.projectContext || []), mode }
+  const request: IntakeRequest = {
+    brief: state.brief.trim(), areas: unique(state.areas.map(x => x.trim()).filter(Boolean)),
+    answers: [], previousItems: copy(state.result?.items || []), projectContext: copy(state.projectContext || []), mode,
+  }
+  // Keep the full history locally. Prioritize the latest answer and citations
+  // still used by the draft before filling the remaining provider context.
+  const cited = new Set(request.previousItems.flatMap(item =>
+    [...item.evidence, ...item.standards.flatMap(standard => standard.evidence)]
+      .filter(evidence => evidence.sourceId.startsWith('answer:')).map(evidence => evidence.sourceId.slice(7)),
+  ))
+  const history = [...state.answers].reverse()
+  const candidates = [...history.slice(0, 1), ...history.slice(1).filter(answer => cited.has(answer.id)), ...history.slice(1).filter(answer => !cited.has(answer.id))]
+  const encoder = new TextEncoder()
+  let bytes = encoder.encode(JSON.stringify(request)).byteLength
+  const included = new Set<string>()
+  for (const answer of candidates) {
+    if (included.size === 40) break
+    const size = encoder.encode(JSON.stringify(answer)).byteLength + 1
+    if (bytes + size > 128 * 1024) continue
+    included.add(answer.id)
+    bytes += size
+  }
+  request.answers = copy(state.answers.filter(answer => included.has(answer.id)))
+  const available = (evidence: IntakeItem['evidence'][number]) => !evidence.sourceId.startsWith('answer:') || included.has(evidence.sourceId.slice(7))
+  for (const item of request.previousItems) {
+    item.evidence = item.evidence.filter(available)
+    for (const standard of item.standards) standard.evidence = standard.evidence.filter(available)
+  }
+  return request
 }
 export function pendingQuestions(state: IntakeState): IntakeQuestion[] {
   const answered = new Set(state.answers.map(x => x.id))
@@ -92,6 +120,15 @@ export function applyIntakeResult(state: IntakeState, result: IntakeResult): Int
   const previous = new Map((state.result?.items || []).map(item => [item.id, JSON.stringify(item)]))
   const unchanged = new Set(result.items.filter(item => previous.get(item.id) === JSON.stringify(item)).map(item => item.id))
   next.result = copy(result)
+  const ids = new Set([...next.answers.map(answer => answer.id), ...result.questions.map(question => question.id)])
+  for (const question of next.result.questions) {
+    if (!next.answers.some(answer => answer.id === question.id && answer.question !== question.text)) continue
+    let suffix = 1
+    let candidate = `${question.id.slice(0, 48)}-next-${suffix}`
+    while (ids.has(candidate)) candidate = `${question.id.slice(0, 48)}-next-${++suffix}`
+    ids.add(candidate)
+    question.id = candidate
+  }
   next.reviewedIds = state.reviewedIds.filter(id => unchanged.has(id))
   next.acceptedSuggestionIds = state.acceptedSuggestionIds.filter(id => unchanged.has(id))
   next.editedIds = state.editedIds.filter(id => unchanged.has(id))
@@ -109,7 +146,6 @@ export function answerQuestion(state: IntakeState, question: IntakeQuestion, ans
   const index = next.answers.findIndex(x => x.id === question.id)
   if (index >= 0) next.answers[index] = entry
   else next.answers.push(entry)
-  if (next.answers.length > 40) throw new Error('本次访谈回答较多，请先整理草稿。')
   const affected = question.targetId
     ? new Set([question.targetId, ...(next.result?.items.filter(item => item.dependencies.includes(question.targetId!)).map(item => item.id) || [])])
     : null

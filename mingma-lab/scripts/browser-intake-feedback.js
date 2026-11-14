@@ -14,11 +14,13 @@ return (async () => {
   }
   let respond
   let signal
+  const sent = []
   location.hash = '#clarify'
   await wait(130)
   try {
     window.fetch = (_url, options) => {
       signal = options.signal
+      sent.push(options.body)
       return new Promise((resolve, reject) => {
         respond = resolve
         signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true })
@@ -43,9 +45,14 @@ return (async () => {
     click('cancel')
     check(signal.aborted && status() === 'cancelled', 'Cancelling clears the waiting state immediately')
     click('start')
-    respond(new Response(JSON.stringify({ error: { message: '测试：请求暂未完成' } }), { status: 503 }))
+    respond(new Response(JSON.stringify({ error: { message: '测试：服务暂不可用', retryable: true } }), { status: 503 }))
     await wait(150)
-    check(status() === 'error' && !!q('[data-intake-action="retry"]'), 'Failure and retry are visible in the same place')
+    check(status() === 'busy' && q('.intake-request-message').textContent.includes('重试'), 'A transient failure keeps the waiting dock visible')
+    await wait(1100)
+    check(sent.length === 3 && sent[1] === sent[2], 'Automatic retry resends the same payload')
+    respond(new Response(JSON.stringify({ error: { message: '测试：请检查配置', retryable: false } }), { status: 502 }))
+    await wait(1150)
+    check(sent.length === 3 && status() === 'error' && !!q('[data-intake-action="retry"]'), 'A non-retryable failure stops the retry loop')
     check(destinations.length === 0, 'Cancellation and failure do not navigate to a result')
     click('retry')
     respond(new Response(JSON.stringify({
