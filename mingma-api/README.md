@@ -40,6 +40,7 @@ curl -X POST http://127.0.0.1:5199/api/ai/intake \
 | `GET /api/health` | 服务状态及密钥是否配置 | 不调用模型 |
 | `GET /api/openapi.json` | 读取生成的接口契约 | 不调用模型 |
 | `POST /api/ai/intake` | 多区域拆分、动态追问和四组需求草稿 | [intake.json](examples/intake.json) |
+| `POST /api/ai/floorplan` | 从图片识别房间、墙线、门窗和可见家具候选 | [输入与坐标约定](../docs/api/README.md#户型图识别) |
 | `POST /api/ai/clarify` | 从表达中提取事实并选择下一轮问题 | [clarify.json](examples/clarify.json) |
 | `POST /api/ai/requirements` | 将对话整理为待确认需求草稿 | [requirements.json](examples/requirements.json) |
 | `POST /api/ai/review` | 按需求版本逐项核对方案原文 | [review.json](examples/review.json) |
@@ -74,7 +75,7 @@ try {
 }
 ```
 
-导入路径按调用文件位置调整。浏览器运行时代码不导入 Zod；类型通过服务端 schema 推导。本机部署网关和 Vite 开发配置已转发同源 `/api`。独立静态服务器需另行配置转发，不能只改变客户端地址就获得后端服务。LAN 页面可直接调用网关开放的 intake 接口，无需访问码。
+导入路径按调用文件位置调整。浏览器运行时代码不导入 Zod；上述客户端类型通过服务端 schema 推导。户型识别由 `planning-analysis.ts` 直接调用同源 `/api/ai/floorplan`，使用独立的共享图形契约，不属于 `client.ts` 的文本接口方法。本机部署网关和 Vite 开发配置已转发同源 `/api`。独立静态服务器需另行配置转发，不能只改变客户端地址就获得后端服务。LAN 页面可直接调用网关开放的 intake 和 floorplan 接口，无需访问码。
 
 ## 运行配置
 
@@ -82,10 +83,10 @@ try {
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | 空 | 只存于服务端；缺少时 AI POST 返回 503 |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | 仅允许官方 HTTPS 地址；本地模拟有独立限制 |
-| `DEEPSEEK_MODEL` | `deepseek-flash` | 发送给 DeepSeek 的模型名称 |
+| `DEEPSEEK_MODEL` | `deepseek-flash` | 文本接口使用的模型；户型识别固定使用支持图片的 `deepseek-flash` |
 | `HOST` / `PORT` | `127.0.0.1` / `5199` | 默认仅本机访问 |
-| `AI_TIMEOUT_MS` | `60000` | 模型等待时限，100–120000 毫秒 |
-| `AI_MAX_OUTPUT_TOKENS` | `8192` | 输出上限，512–16384 |
+| `AI_TIMEOUT_MS` | `60000` | 文本接口等待时限，100–120000 毫秒；户型识别为该值的两倍，上限 120000 毫秒 |
+| `AI_MAX_OUTPUT_TOKENS` | `8192` | 文本接口输出上限，512–16384；户型识别使用 14000 |
 | `AI_MAX_CONCURRENT` | `2` | 整个进程同时运行的模型请求数，1–10 |
 | `AI_REQUESTS_PER_MINUTE` | `20` | 每个来源 IP 的每分钟请求上限，1–120 |
 | `CORS_ORIGINS` | 见 `.env.example` | 逗号分隔的明确网页来源，不接受通配符 |
@@ -95,7 +96,7 @@ try {
 
 绑定非回环地址时必须设置 `API_ACCESS_TOKEN`。设置后所有 AI POST 请求需带 `Authorization: Bearer <服务访问令牌>`；健康和契约读取无需令牌，但仍检查来源。该令牌只控制本服务访问，不构成业主/商家的账号权限系统。当前接口还没有生产环境的多租户隔离和审计存储。
 
-本机部署的 API 仍只监听回环地址。LAN 通过 5188 网关直接开放同源 intake 请求，无需访问码；其他 API 保持本机限制。网关检查私有 IPv4 来源、Host 和 Origin，后端继续限流。DeepSeek 密钥只保存在服务端。参见[本机部署说明](../docs/local-deployment.md)。
+本机部署的 API 仍只监听回环地址。LAN 通过 5188 网关直接开放同源 intake 和 floorplan 请求，无需访问码；其他 API 保持本机限制。网关检查私有 IPv4 来源、Host 和 Origin，后端继续限流。DeepSeek 密钥只保存在服务端。参见[本机部署说明](../docs/local-deployment.md)。
 
 ## 检查与维护
 
@@ -105,7 +106,7 @@ npm run build
 npm run test:simulation
 ```
 
-契约源文件是 [`src/schemas.ts`](src/schemas.ts) 和 [`src/intake.ts`](src/intake.ts)，输入示例在 `examples/`；[`scripts/generate-openapi.ts`](scripts/generate-openapi.ts) 生成 OpenAPI 和 Postman 集合。修改字段后重新生成，不直接手改生成文件。
+契约源文件是 [`src/schemas.ts`](src/schemas.ts)、[`src/intake.ts`](src/intake.ts) 和 [`src/floorplan.ts`](src/floorplan.ts)，输入示例在 `examples/`；[`scripts/generate-openapi.ts`](scripts/generate-openapi.ts) 生成 OpenAPI 和文本接口 Postman 集合。修改字段后重新生成，不直接手改生成文件。户型识别的独立集合及模拟检查见[验证记录](../docs/floorplan-recognition-verification.json)。
 
 `test:simulation` 需要 Postman CLI 1.70 或更新版本，自动启动真实接口和本地 DeepSeek 替身，强制使用假密钥并在结束后关闭测试进程。它不加载 `.env`、不产生真实模型用量。加 `-- --collection` 会同时运行正式 Postman 集合；本轮模拟验证为 39 个场景与 21 个集合断言。
 
@@ -122,7 +123,7 @@ postman collection run postman/collections/mingma-ai.postman_collection.json
 
 ## 当前边界
 
-- 只处理请求中的文字；不读取用户文件路径、网页 URL、PDF、图片或 CAD。
+- 文本接口只处理请求中的文字；floorplan 接受 JPEG、PNG、WebP 的内联图片。所有接口均不读取用户文件路径、任意网页 URL、PDF 或 CAD。
 - 原文引用只能证明文字来自输入，不证明模型推理或工程判断正确。
 - 未知尺寸、现场条件和专业复核项保留；“已回应”不是施工验收通过。
 - 不做价格分析，不替用户选定商家，不自动更新长期规则或训练模型。

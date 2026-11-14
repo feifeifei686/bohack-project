@@ -21,7 +21,12 @@
 | `vite.config.ts` | Tailwind 插件、相对资源路径、澄境与旧链接跳转入口 |
 | `versions/<版本>/src/main.ts` | 页面模板、hash 导航、事件处理、状态与本地存储 |
 | `shared/intake-ui.ts`、`intake-ui.css` | 三版共享的表达、追问、编辑、确认和导出界面 |
-| `shared/room-planning.ts`、`planning-source.ts`、`planning-floorplan.ts` | 图纸预览、手工房间标注与概念户型生成，澄境使用左右分区入口 |
+| `shared/room-planning.ts`、`planning-source.ts`、`planning-floorplan.ts` | 图纸预览、识别入口、手工房间标注与概念户型生成，澄境使用左右分区入口 |
+| `shared/planning-analysis.ts`、`planning-recognized.ts`、`floorplan-contract.ts` | 图片压缩与识别请求、候选校对、房间和家具几何及前后端契约 |
+| `shared/planning-room-links.ts` | 保留房间改名前的需求名称关联，避免已有需求失去空间定位 |
+| `shared/intake-questionnaire.ts`、`intake-questionnaire.css` | 澄境分步问卷、逐题补充和逐条确认 |
+| `shared/assessment.ts`、`assessment-ui.ts`、`assessment.css` | 八维风险检查、来源失效、核实安排与评估展示 |
+| `versions/lucid/src/project-flow.ts`、`proposal-samples.ts` | 项目进度解锁和按当前需求生成的模拟方案 |
 | `shared/intake-state.ts`、`intake-state.test.ts` | 访谈草稿、建议采纳、确认门槛、冲突与迟到响应保护 |
 | `shared/intake-contract.ts` | 前后端共用的公开类型与背景条目，不包含运行时依赖或密钥 |
 | `shared/requirements-hub.ts`、`requirements-hub.css`、`requirements-hub.test.ts` | 统一需求页的背景迁移、派生待办、只读历史记录及样式 |
@@ -42,7 +47,7 @@
 
 ## 页面与状态
 
-每版有八个有效页面：`#overview`、`#planning`、`#clarify`、`#requirements`、`#compare`、`#vendor`、`#space`、`#records`。`#planning` 负责图纸与区域规划，澄境的 `#space` 默认进入工程分层，可切换“房间与线路”。`#requirements` 统一显示“我的需求”；旧 `#dimensions` 兼容跳转到该页，独立维度导航与评分表已撤下。页面路由不需要服务器回退；真实 AI 共创需要同源 `/api` 转发。Vite 开发服务默认代理到 5199，本机部署由 `scripts/local-web.mjs` 同时提供构建产物和 API 转发；单独解压静态 ZIP 不包含这项服务。
+原有八个页面为 `#overview`、`#planning`、`#clarify`、`#requirements`、`#compare`、`#vendor`、`#space`、`#records`；澄境另有需求形成后开放的 `#assessment`。澄境六步主流程按项目证据依次解锁，返回前一步不撤销已取得的页面访问权限。`#planning` 负责图纸与区域规划，澄境的 `#space` 默认进入工程分层，可切换“房间与线路”。`#requirements` 统一显示“我的需求”；旧 `#dimensions` 兼容跳转到该页，独立维度导航与评分表已撤下。页面路由不需要服务器回退；真实 AI 共创和户型识别需要同源 `/api` 转发。Vite 开发服务默认代理到 5199，本机部署由 `scripts/local-web.mjs` 同时提供构建产物和 API 转发；单独解压静态 ZIP 不包含这项服务。
 
 ```mermaid
 flowchart TD
@@ -111,18 +116,18 @@ K02,partial,"已预留洗碗机安装位与电源，供水和排水配套待补�
 
 `#space` 默认复用首页住宅，展示结构与拆改、水电管线、防水与铺装、吊顶与木作、柜体与固装、家具与居住六层。支持合拢、展开程度、选择、单层查看、旋转与缩放；工程示意不读取上传图纸或商家方案。原“房间与线路”模式仍把三维坐标投影为 SVG，支持俯视、房间点选、墙体和线路筛选，不依赖 WebGL。商家资料为空时显示缺口，不借用演示线路。
 
-`#planning` 可上传 PNG、JPG、WebP，手工框选或填写矩形房间范围，再生成概念模型并关联区域共创。图纸和标注只保留在本轮；自动识别、门窗校对与尺寸校准尚未实现。五区演示的面积与路线、工程层的构件和管线均为示意，不构成真实工程设计或规范校核。
+`#planning` 可上传 PNG、JPG、WebP，通过 `/api/ai/floorplan` 识别房间多边形、墙线、门窗和图中可见家具，再生成轴测概念模型并关联区域共创。可调整房间名称和范围、家具位置与朝向，也可手工补充矩形房间。图纸和候选结果只保留在本轮；逐点轮廓编辑、门窗校对与真实尺寸校准尚未实现。五区演示的面积与路线、工程层的构件和管线均为示意，不构成真实工程设计或规范校核。
 
 首页和工程预览处理减少动态偏好、离屏暂停与退出清理。WebGL 不可用时，首页显示参考图并保留规划入口；工程页保留层级说明，停用依赖模型的控件，仍可切回 SVG 模式。
 
 ## 运行与验证边界
 
-`npm test` 运行三版领域测试与共享模块测试；`npm run build` 检查三版 TypeScript，构建澄境根入口和旧澄境地址跳转页。浏览器与视觉验收单独执行，本轮见[空间交互验证](ui-transition-verification.json)，包含工程操作、键盘再次进入规划和 WebGL 降级；减少动态效果仅完成源码核查。此前结果见[需求整合验证](requirements-unification-verification.json)、[需求共创验证](intake-release-verification.json)及[历史摘要](../mingma-lab/review/verification.json)。
+`npm test` 运行三版领域测试与共享模块测试；`npm run build` 检查三版 TypeScript，构建澄境根入口和旧澄境地址跳转页。浏览器与视觉验收单独执行，当前新增能力见[户型识别验证](floorplan-recognition-verification.json)、[问卷验证](questionnaire-workflow-verification.json)和[风险评估验证](risk-assessment-verification.json)。首页与工程预览的阶段检查见[空间交互验证](ui-transition-verification.json)，包含工程操作、键盘再次进入规划和 WebGL 降级；减少动态效果仅完成源码核查。此前结果见[需求整合验证](requirements-unification-verification.json)、[需求共创验证](intake-release-verification.json)及[历史摘要](../mingma-lab/review/verification.json)。
 
-AI 服务的协议见[接口契约](api/README.md)；Zod schema 同时用于校验与 OpenAPI 生成。主入口在 `mingma-api/src/server.ts`，HTTP 边界在 `app.ts`，提供商适配在 `provider.ts`；新流程定义和约束在 `intake.ts`，原四接口在 `operations.ts`。每次请求携带上下文，不将项目写入数据库。数值必须具有当前用户原文依据，既有草稿不能变成新的测量证据；现场、商家和专业待办不会因模型少返回一个字段而自动消失。
+AI 服务的协议见[接口契约](api/README.md)；Zod schema 同时用于校验与 OpenAPI 生成。主入口在 `mingma-api/src/server.ts`，HTTP 边界在 `app.ts`，提供商适配在 `provider.ts`；需求共创定义和约束在 `intake.ts`，户型图片与候选几何校验在 `floorplan.ts`，原四接口在 `operations.ts`。每次请求携带上下文，不将项目写入数据库。需求数值必须具有当前用户原文依据，既有草稿不能变成新的测量证据；现场、商家和专业待办不会因模型少返回一个字段而自动消失。户型结果使用图像相对坐标，不能作为实测尺寸。
 
 浏览器接入保留原输入、可编辑草稿与来源数组。取消、超时、页面离开和新一轮编辑会阻止过期结果覆盖当前内容，错误不会静默退回演示答案。服务没有账号、数据库或自动发送权限，返回成功不代表需求已经发布。
 
 ## 局域网访问边界
 
-本机部署仍将 API 5199 绑定到回环地址。LAN 网关允许同一私有 IPv4 局域网中的设备直接调用同源 `POST /api/ai/intake`，无需访问码；其他 API 和诊断入口对远端仍返回 403。网关继续检查 Host 与 Origin，后端保留请求频率和并发限制；浏览器不持有 DeepSeek 密钥。
+本机部署仍将 API 5199 绑定到回环地址。LAN 网关允许同一私有 IPv4 局域网中的设备直接调用同源 `POST /api/ai/intake` 和 `POST /api/ai/floorplan`，无需访问码；其他 API 和诊断入口对远端仍返回 403。网关继续检查 Host 与 Origin，后端保留请求频率和并发限制；浏览器不持有 DeepSeek 密钥。
