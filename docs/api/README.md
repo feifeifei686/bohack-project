@@ -231,6 +231,17 @@ AI 成功响应：
 
 当前 UI 的 `Proposal.items` 可按需求编号拼接成文字，例如 `K02：预留洗碗机安装位。`；传入文本必须与后续显示引用的文本一致。AI 接口的 evidence 是数组，不能直接替换旧演示代码中的单个 evidence 字符串而不调整渲染。
 
-本轮页面与接口验收见[新版验证记录](../intake-release-verification.json)。商家页面的本地规则、模拟身份和原有历史版本继续保留；上传户型图生成模型尚未实现。
+本轮页面与接口验收见[新版验证记录](../intake-release-verification.json)。商家页面的本地规则、模拟身份和原有历史版本继续保留；户型图片识别与概念模型已接入，详见下文。
 
 LAN 网关会对未开放的接口返回 `403 LOCAL_ONLY`，对不符合来源要求的请求返回 403；这些请求不会调用模型。访问码校验已移除，正常需求共创请求仍受后端的请求频率和并发限制。
+
+
+## 户型图识别
+
+`POST /api/ai/floorplan` 接受 `{ "image": "data:image/jpeg;base64,..." }`，也支持 PNG / WebP。解码后的图片不得超过 4 MiB，JSON 请求体最多约 6 MiB。前端允许选择 12 MB 以内的图纸并先缩放压缩。复用现有 DeepSeek 密钥，固定使用支持视觉输入的 `deepseek-flash`。
+
+响应 `{ requestId, data: { rooms, walls, openings, furniture, warnings }, meta }`。点坐标为完整原图上的 0–1000 相对坐标；房间为多边形，家具 `bounds` 为 `[左,上,宽,高]`，`rotation` 为朝向角度；均不是真实米制尺寸。`meta.requiresHumanConfirmation` 始终为 true。几何、数量、编号、引用和图片格式经过服务端校验，模型内容不作为 HTML 或指令执行。
+
+`422 FLOORPLAN_NOT_FOUND` 表示未得到户型，`400 INVALID_IMAGE` 表示格式或大小不合法，`502 AI_INVALID_OUTPUT` 表示候选几何无法使用；其他错误继承现有模型接口。单次最多等待 120 秒，无自动重试。服务端不写入原图或图像正文日志。局域网同源可调用本接口，其他原有限本机接口保持原访问规则。
+
+本地可运行集合：`postman/collections/mingma-floorplan.postman_collection.json`，其中图片为一像素契约测试图，仅用于 DeepSeek 依赖模拟，不用于评价实际视觉识别。

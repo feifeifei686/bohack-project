@@ -2,6 +2,14 @@ purpose:
   stands_in_for: DeepSeek POST /chat/completions over a local HTTP dependency simulation, with synthetic model responses and deliberate failures.
   unblocks: Verification of the real Mingma API HTTP client, output validation, error mapping, version checks and safe error responses without provider credentials or billing.
 assumptions:
+  - id: floorplan-vision-contract
+    status: supported
+    claim: The floorplan caller sends an inline image content part and returns validated candidate room polygons, openings and furniture; failed recognition does not become demo geometry.
+    reason: Actual API processes were exercised against this Postman dependency and, separately, the official image-capable DeepSeek Flash API. Orbit's older integration brief omitted image inputs; the current official vision guide supplied that contract.
+    verification: On 2026-11-14 the floorplan collection passed 4 assertions; floorplan-simulation-check.ts passed 8 cases including authentication failure, rate limit, upstream failure, malformed JSON/schema, truncation and timeout. Three user-provided plans separately produced 11/10/10 regions and 20/0/19 furniture items; a browser rerun of the furnished plan returned 24 furniture items, demonstrating output variability. These counts are observed candidates, not an accuracy score. Browser checks covered build, selection lift, rename, furniture rotation, replay, questionnaire handoff, failure retention and cancellation.
+    source: mingma-api/src/floorplan.ts ; mingma-api/scripts/floorplan-simulation-check.ts ; postman/collections/mingma-floorplan.postman_collection.json ; https://api-docs.deepseek.com/guides/vision/
+    updated_at: '2026-11-14'
+
   - id: documented-json-envelope
     status: supported
     claim: The caller uses DeepSeek Chat Completions with Bearer auth, non-streaming json_object output and disabled thinking, then parses choices[0].message.content as JSON.
@@ -43,6 +51,13 @@ assumptions:
     reason: Synthetic responses test HTTP and validation behavior, not the semantic accuracy or availability of an actual model. Provider credentials are never loaded by this runner.
     verification: Not established by this simulation. Use separate, explicitly authorized live smoke tests and reviewed examples to evaluate real provider behavior; do not interpret the local success count as model-quality evaluation.
     source: mingma-api/scripts/simulation-check.ts ; mingma-api/src/operations.ts
+    updated_at: '2026-11-14'
+  - id: guided-questionnaire-browser-flow
+    status: supported
+    claim: The Lucid questionnaire uses the real intake HTTP route for initial questions and revised drafts, while explicit per-item confirmation, project route unlocks and sample scheme selection remain browser-local.
+    reason: The browser exercised the production frontend modules against a real API process whose only upstream dependency was the existing local Postman simulation; no browser fetch stub was installed.
+    verification: On 2026-11-14, 31 browser assertions passed across desktop and mobile checks, including a complete 390px run. Cases covered locked direct routes, previous answers, one-item review, suggestion adoption, blocked unassigned requirements, deferral, submission, waiting state, two sample proposals, later-route retention and selection records. Each fresh flow emitted two successful POST /chat/completions events in the dependency log. The mock does not establish real-model semantic quality.
+    source: mingma-lab/scripts/browser-questionnaire-start.js ; mingma-lab/scripts/browser-questionnaire-finish.js ; mingma-lab/scripts/browser-questionnaire-proposals.js ; docs/questionnaire-workflow-verification.json
     updated_at: '2026-11-14'
 fingerprints:
   - id: initial-local-integration
