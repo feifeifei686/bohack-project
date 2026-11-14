@@ -87,7 +87,7 @@
 .planning-page .planning-drawing-toolbar > span { background: #ececdf; color: #626958; padding: 7px 12px; border-radius: 8px; font-size: 15px; }
 .planning-page .planning-paper { margin: 0; border: 1px solid #e4ddce; border-radius: 7px; overflow: hidden; background: #faf7ee; }
 .planning-page .planning-paper > svg { width: 100%; max-height: none; aspect-ratio: 1.43; }
-.planning-page .planning-upload-paper { max-height: none; width: 100%; }
+.planning-page .planning-upload-paper { max-height: none; width: min(100%, calc(60vh * var(--drawing-aspect))); margin-inline: auto; }
 .planning-page .planning-mark-tools { margin-top: 20px; }
 .planning-page .planning-mark-tools p { font-size: 14px; line-height: 1.7; }
 .planning-page .planning-mark-tools > div { display: flex; flex-wrap: wrap; gap: 12px; margin-block: 12px; }

@@ -7,7 +7,7 @@ export function intakeWithSpaceMarkup(model: PlanningModel) {
     <div id="intake-root"></div>
     <aside class="intake-space" aria-label="共创户型预览">
       <div class="intake-space-header">
-        <small>${model.drawing ? '标注户型' : '演示户型'}</small>
+        <small>${model.recognized ? '识别户型' : model.drawing ? '标注户型' : '演示户型'}</small>
         <a href="#planning">查看完整户型 <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 12l8-8M5 4h7v7"/></svg></a>
       </div>
       <div class="intake-space-motion">
@@ -29,7 +29,7 @@ export function captureFloorplanHandoff(): FloorplanHandoff | undefined {
   const topLeft = new DOMPoint(view.x, view.y).matrixTransform(screen)
   const bottomRight = new DOMPoint(view.x + view.width, view.y + view.height).matrixTransform(screen)
   const bounds = new DOMRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y)
-  for (const room of svg.querySelectorAll<SVGGElement>('[data-floor-room]')) {
+  for (const room of svg.querySelectorAll<SVGGElement>('[data-floor-room], [data-floor-label]')) {
     room.style.transform = getComputedStyle(room).transform
     room.style.transition = 'none'
   }
@@ -70,7 +70,7 @@ export function mountIntakeSpacePreview(panel: HTMLElement, handoff?: FloorplanH
 
   function settle() {
     panel.classList.add('is-glass')
-    for (const room of flightRooms) {
+    for (const room of [...flightRooms, ...floorplan.querySelectorAll<SVGGElement>('[data-floor-label]')]) {
       room.style.removeProperty('transition')
       room.style.removeProperty('transform')
       room.classList.remove('is-selected')
@@ -102,7 +102,7 @@ export function mountIntakeSpacePreview(panel: HTMLElement, handoff?: FloorplanH
     lastPresentation = key
     panel.dataset.spatialPhase = phase
     const roomIds = new Set(focus.roomIds)
-    for (const room of flightRooms) {
+    for (const room of [...flightRooms, ...floorplan.querySelectorAll<SVGGElement>('[data-floor-label]')]) {
       const active = roomIds.has(room.dataset.floorRoom || '')
       room.classList.toggle('is-focused', active)
       for (const part of room.querySelectorAll('[data-floor-feature], [data-model-floor], [data-model-wall]')) {

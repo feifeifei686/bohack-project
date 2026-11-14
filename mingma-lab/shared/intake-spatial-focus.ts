@@ -1,3 +1,4 @@
+import { planningRoomMatches, planningRoomNames } from './planning-room-links.ts'
 import type { IntakeItem, IntakeQuestion } from './intake-contract.ts'
 import { demoPlanningModel, type PlanningModel } from './planning-floorplan.ts'
 
@@ -5,9 +6,9 @@ export type SpatialFocus = { roomIds: string[]; feature?: string; label: string 
 
 export function intakeSpatialFocus(areas: string[], question?: IntakeQuestion, target?: IntakeItem, model: PlanningModel = demoPlanningModel): SpatialFocus {
   const knownRooms = model.rooms.filter(room => {
-    if (target) return (target.scope === 'area' || target.scope === 'shared') && target.areas.includes(room.name)
-    if (question) return question.text.includes(room.name)
-    return areas.includes(room.name)
+    if (target) return (target.scope === 'area' || target.scope === 'shared') && planningRoomMatches(room, target.areas)
+    if (question) return planningRoomNames(room).some(name => question.text.includes(name))
+    return planningRoomMatches(room, areas)
   })
   const roomIds = knownRooms.map(room => room.id)
   const label = knownRooms.map(room => room.name).join('、') ||

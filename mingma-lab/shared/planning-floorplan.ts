@@ -1,7 +1,8 @@
+import { renderRecognizedFloorplan, type PlanFurniture, type PlanSegment } from './planning-recognized'
 type Point = [number, number]
 export type Bounds = [x: number, z: number, width: number, depth: number]
 
-export type PlanningRoom = { id: string; name: string; bounds: Bounds; label: Point; material: string }
+export type PlanningRoom = { id: string; name: string; bounds: Bounds; label: Point; material: string; polygon?: Point[]; confidence?: number; previousNames?: string[] }
 
 export const planningRooms: PlanningRoom[] = [
   { id: 'living', name: '客厅', bounds: [0, 4.15, 7.4, 3.25], label: [4.55, 5.95], material: 'wood' },
@@ -130,7 +131,7 @@ const demoWindows: { bounds: Bounds; owner: string }[] = [
   { bounds: [7.36, -.12, 1.44, .13], owner: 'kitchen' },
 ]
 
-export type PlanningModel = { rooms: PlanningRoom[]; drawing?: string; drawingAspect?: number }
+export type PlanningModel = { rooms: PlanningRoom[]; drawing?: string; drawingAspect?: number; recognized?: boolean; imageBounds?: Bounds; walls?: PlanSegment[]; openings?: (PlanSegment & { kind: 'door' | 'window' })[]; furniture?: PlanFurniture[]; warnings?: string[]; analysisState?: 'idle' | 'pending' | 'ready' | 'error'; analysisError?: string }
 export const demoPlanningModel: PlanningModel = { rooms: planningRooms }
 
 function wallsFor(model: PlanningModel): Wall[] {
@@ -178,6 +179,7 @@ function drawRoom(room: PlanningRoom, preview: boolean, walls: Wall[], demo: boo
 }
 
 export function renderPlanningFloorplan(preview = false, model = demoPlanningModel) {
+  if (model.recognized && model.rooms.length) return renderRecognizedFloorplan(model, preview)
   const shadow = preview ? 'planning-preview-shadow' : 'planning-shadow'
   const base: Bounds = [-0.20, -0.20, 10.40, 7.80]
   const corridor: Bounds = [0, 3, 6.8, 1.15]
@@ -195,6 +197,7 @@ export function renderPlanningFloorplan(preview = false, model = demoPlanningMod
 }
 
 export function drawingBounds(model: PlanningModel): Bounds {
+  if (model.imageBounds) return model.imageBounds
   const ratio = model.drawingAspect || 10 / 7.4
   const width = Math.min(10, 7.4 * ratio)
   const depth = width / ratio

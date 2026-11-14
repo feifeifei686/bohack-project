@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Config } from './config.ts'
 import { ApiError } from './errors.ts'
 
-export type Message = { role: 'system' | 'user'; content: string }
+export type Message = { role: 'system' | 'user'; content: string | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'high' } })[] }
 const Completion = z.object({
   model: z.string().trim().min(1).max(100).optional(),
   choices: z.array(z.object({

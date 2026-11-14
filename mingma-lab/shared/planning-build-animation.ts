@@ -60,6 +60,7 @@ export function animatePlanningBuild(
     wall: node.hasAttribute('data-model-wall'),
     floor: node.hasAttribute('data-model-floor') || (!node.hasAttribute('data-model-wall') && !node.closest('[data-floor-room]')),
   }))
+  const prisms = [...svg.querySelectorAll<SVGGElement>('[data-model-prism]')].map(node => ({ node, data: JSON.parse(node.dataset.modelPrism!) as [[number,number][],number,number] }))
   const extras = [...svg.querySelectorAll<SVGElement>('.planning-seams, .planning-room-label, .planning-outline, .planning-tint, .planning-hotspot, .planning-lift-shadow, [data-model-detail]')]
   let frame = 0
   function draw(t: number) {
@@ -83,6 +84,14 @@ export function animatePlanningBuild(
         parts[i].setAttribute('points', faces[i].join(' '))
         parts[i].setAttribute('opacity', String(floor ? phase(t, .04, .32) : wall ? phase(t, .13, .38) : rise))
       }
+    }
+    for (const { node, data: [polygon,h,base] } of prisms) {
+      const floor=node.hasAttribute('data-model-floor') || !node.closest('[data-floor-room]')
+      const rise=floor?phase(t,.05,.57):node.hasAttribute('data-model-wall')?walls:furnishings
+      const top=polygon.map(([x,z])=>project(x,z,(base+h)*rise)),low=polygon.map(([x,z])=>project(x,z,base*rise))
+      const faces=polygon.map((_,i)=>[top[i],top[(i+1)%top.length],low[(i+1)%low.length],low[i]])
+      faces.push(top)
+      for(const [i,child] of [...node.children].entries()) {child.setAttribute('points',faces[i].join(' '));child.setAttribute('opacity',String(floor?phase(t,.04,.32):rise))}
     }
     for (const node of extras) node.style.opacity = String(phase(t, .78, 1))
     const backdrop = phase(t, 0, .22) * (1 - phase(t, .56, .98))

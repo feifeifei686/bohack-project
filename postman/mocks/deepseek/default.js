@@ -63,6 +63,7 @@ function intakeResult(input) {
   };
 }
 function result(operation, input) {
+  if (operation === 'floorplan') return {"rooms": [{"id": "living", "name": "客厅", "kind": "living", "polygon": [[100, 100], [600, 100], [600, 400], [400, 400], [400, 800], [100, 800]], "confidence": 0.9}, {"id": "bedroom", "name": "卧室", "kind": "bedroom", "polygon": [[600, 100], [900, 100], [900, 800], [600, 800]], "confidence": 0.85}], "walls": [{"roomId": "living", "start": [100, 100], "end": [600, 100]}, {"roomId": "bedroom", "start": [900, 100], "end": [900, 800]}], "openings": [{"roomId": "living", "kind": "window", "start": [200, 100], "end": [400, 100]}], "furniture": [{"id": "bed1", "roomId": "bedroom", "kind": "bed", "bounds": [650, 300, 200, 300], "rotation": 90, "confidence": 0.9}], "warnings": ["合成测试图形，不代表模型识别准确率。"]};
   if (operation === 'intake') return intakeResult(input);
   if (operation === 'clarify') return {
     summary: '已记录厨房使用需求，还需确认设备信息。',
@@ -107,11 +108,13 @@ http.createServer(async (req, res) => {
     });
     if (path !== '/chat/completions' || req.method !== 'POST') return send(res, 501, { error: 'Endpoint not modeled' });
     const body = req.body;
-    if (!body || !Array.isArray(body.messages) || body.messages.length !== 2 || body.messages[0].role !== 'system' || body.messages[1].role !== 'user' || body.response_format?.type !== 'json_object' || body.thinking?.type !== 'disabled' || body.stream !== false || !Number.isInteger(body.max_tokens) || body.max_tokens < 512 || typeof body.model !== 'string') {
+    if (!body || !Array.isArray(body.messages) || body.messages.length !== 2 || body.messages[0].role !== 'system' || body.messages[1].role !== 'user' || body.response_format?.type !== 'json_object' || !['disabled','enabled'].includes(body.thinking?.type) || body.stream !== false || !Number.isInteger(body.max_tokens) || body.max_tokens < 512 || typeof body.model !== 'string') {
       return send(res, 400, { error: 'DeepSeek caller request does not match modeled contract' });
     }
-    const operation = body.messages[0].content.match(/^operation: (clarify|requirements|review|explain|intake)\b/)?.[1];
-    const payload = JSON.parse(body.messages[1].content);
+    const vision = Array.isArray(body.messages[1].content);
+    if(vision && !body.messages[1].content.some(p=>p.type==='image_url' && p.image_url?.url.startsWith('data:image/'))) return send(res,400,{error:'Missing image'});
+    const operation = vision ? 'floorplan' : body.messages[0].content.match(/^operation: (clarify|requirements|review|explain|intake)\b/)?.[1];
+    const payload = vision ? {operation:'floorplan',input:{}} : JSON.parse(body.messages[1].content);
     if (!operation || payload.operation !== operation || !payload.input) return send(res, 400, { error: 'Missing operation or input' });
     const count = (await pm.state.get('deepseek.requests')) || 0;
     const ops = (await pm.state.get('deepseek.operations')) || {};

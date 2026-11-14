@@ -1,3 +1,4 @@
+import { planningRoomMatches } from './planning-room-links'
 import { bindPlanSource, renderPlanningSource } from './planning-source'
 import { animatePlanningBuild, capturePlanningDrawing } from './planning-build-animation'
 import { demoPlanningModel, renderPlanningFloorplan } from './planning-floorplan'
@@ -40,6 +41,7 @@ export function createRoomPlanning({ editorial = false } = {}) {
   let seen = false
   let model = demoPlanningModel
   let stage: 'drawing' | 'building' | 'model' = 'drawing'
+  let cancelAnalysis: (() => void) | undefined
   let cancelBuild: (() => void) | undefined
   const selectedRoom = () => model.rooms.find(room => room.id === selectedRoomId) || model.rooms[0]
 
@@ -54,7 +56,7 @@ export function createRoomPlanning({ editorial = false } = {}) {
       <div class="planning-layout" ${stage === 'drawing' ? 'hidden' : ''}>
         <div class="planning-model">
           <div class="planning-stage${seen ? '' : ' planning-stage--enter'}">
-            <span class="planning-source">${model.drawing ? '标注户型' : '演示户型'}</span>
+            <span class="planning-source">${model.recognized ? 'AI 识别 · 待核对' : model.drawing ? '标注户型' : '演示户型'}</span>
             ${renderPlanningFloorplan(false, model)}
           </div>
           <div class="planning-model-footer">
@@ -80,6 +82,7 @@ export function createRoomPlanning({ editorial = false } = {}) {
     const layout = root.querySelector<HTMLElement>('.planning-layout')!
     const canvas = root.querySelector<HTMLElement>('.planning-stage')!
     function refresh(focus?: string) {
+      cancelAnalysis?.()
       const template = document.createElement('template')
       template.innerHTML = render()
       const next = template.content.firstElementChild as HTMLElement
@@ -88,11 +91,12 @@ export function createRoomPlanning({ editorial = false } = {}) {
       if (focus) next.querySelector<HTMLElement>(focus)?.focus({ preventScroll: true })
     }
     const addRoom = bindPlanSource(slot, model, next => {
-      if (model.drawing) URL.revokeObjectURL(model.drawing)
+      if (model.drawing && model.drawing !== next.drawing) URL.revokeObjectURL(model.drawing)
       model = next
       activeHotspot = null
       refresh('[data-mark-name]')
     })
+    cancelAnalysis = addRoom.cancel
     const details = root.querySelector('#planning-room-details')!
     const groups = [...root.querySelectorAll<SVGGElement>('[data-floor-room]')]
     const layer = root.querySelector('.planning-room-layer')!
@@ -123,7 +127,7 @@ export function createRoomPlanning({ editorial = false } = {}) {
       const room = selectedRoom()
       if (!room || stage === 'drawing') return
       selectedRoomId = room.id
-      const actual = requirements.filter(req => req.intake ? req.intake.areas.includes(room.name) : req.room === room.name)
+      const actual = requirements.filter(req => planningRoomMatches(room, req.intake ? req.intake.areas : [req.room]))
       const sample = model.drawing ? [] : examples[room.id]
       const entries = actual.length ? actual : sample
       details.innerHTML = `<div class="planning-room-heading">
@@ -134,6 +138,7 @@ export function createRoomPlanning({ editorial = false } = {}) {
         <ul class="planning-needs">${!entries.length ? '<li>还没有记录这个区域的硬装需求。</li>' : ''}${entries.map(entry => `<li data-planning-need="${escape(entry.id)}"><b>${escape(entry.title)}</b><p>${escape(entry.description)}</p></li>`).join('')}</ul>
         ${actual.length && activeHotspot ? `<div class="planning-example-focus" data-planning-need="${activeHotspot}"><small>构件示例</small><b>${sample.find(entry => entry.id === activeHotspot)?.title || ''}</b></div>` : ''}`
       for (const group of groups) group.classList.toggle('is-selected', group.dataset.floorRoom === room.id)
+      for (const label of root.querySelectorAll<SVGGElement>('[data-floor-label]')) label.classList.toggle('is-selected', label.dataset.floorLabel === room.id)
       const currentGroup = groups.find(group => group.dataset.floorRoom === room.id)!
       if (stage === 'building') {
         layer.append(currentGroup)
@@ -157,7 +162,7 @@ export function createRoomPlanning({ editorial = false } = {}) {
       if (step === 'demo') { reset(); refresh('[data-plan-step="build"]'); return }
       if (step === 'undo') { model.rooms.pop(); refresh('[data-mark-name]'); return }
       if (step === 'mark') { if (addRoom()) refresh('[data-mark-name]'); return }
-      if (step === 'build' && stage === 'drawing' && model.rooms.length) {
+      if (step === 'build' && stage === 'drawing' && model.rooms.length && model.analysisState !== 'pending') {
         const drawing = capturePlanningDrawing(slot.querySelector<HTMLElement>('.planning-paper')!, model)
         stage = 'building'
         root.dataset.stage = stage
@@ -220,6 +225,8 @@ export function createRoomPlanning({ editorial = false } = {}) {
 
   function reset() {
     cancelBuild?.()
+    cancelAnalysis?.()
+    if (model.analysisState === 'pending') model.analysisState = 'idle'
     if (model.drawing) URL.revokeObjectURL(model.drawing)
     model = demoPlanningModel
     stage = 'drawing'
@@ -229,6 +236,8 @@ export function createRoomPlanning({ editorial = false } = {}) {
   }
   return { render, mount, selectedRoom, reset, model: () => model, leave() {
     cancelBuild?.()
+    cancelAnalysis?.()
+    if (model.analysisState === 'pending') model.analysisState = 'idle'
     if (stage === 'building') stage = 'model'
   } }
 }

@@ -1,3 +1,4 @@
+import { FloorplanRequest, FloorplanOutput } from '../src/floorplan.ts'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -60,6 +61,20 @@ for (const operation of operations) {
     },
   }
 }
+componentSchemas.FloorplanRequest = jsonSchema(FloorplanRequest, 'input')
+componentSchemas.FloorplanResult = jsonSchema(FloorplanOutput, 'output')
+paths['/api/ai/floorplan'] = { post: {
+  tags: ['AI'], operationId: 'recognizeFloorplan', summary: '识别上传户型图中的房间、门窗和家具',
+  description: '接受单张 JPEG/PNG/WebP base64 data URL，解码后至多4MiB。完整图像坐标归一化为0..1000；不生成图中不存在的家具，不推断真实尺寸。图片仅用于本次DeepSeek视觉识别，不写入日志或磁盘。局域网同源可调用。结果需用户校对。',
+  security: [{}, { localAccessToken: [] }],
+  requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/FloorplanRequest' } } } },
+  responses: {
+    '200': { description: '候选几何与来源模型，等待校对。', content: { 'application/json': { schema: jsonSchema(z.object({requestId:z.string(),data:FloorplanOutput,meta:z.object({model:z.string(),requiresHumanConfirmation:z.literal(true),durationMs:z.number(),usage:z.object({promptTokens:z.number(),completionTokens:z.number(),totalTokens:z.number()})})}), 'output') } } },
+    ...errorResponses,
+    '413': {description:'图片请求体超过6MiB。'},
+    '422': {description:'FLOORPLAN_NOT_FOUND：未识别到清晰户型，请换图或手工标注。'}
+  }
+} }
 paths['/api/health'] = { get: {
   tags: ['Service'], operationId: 'health', summary: '检查服务及密钥配置状态', security: [],
   description: '不请求模型，不验证账户余额或实时可用性。无需服务访问令牌，但仍检查 Host 与 Origin。',
