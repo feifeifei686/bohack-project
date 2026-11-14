@@ -239,6 +239,10 @@
   animation: atmosphere-drift 24s ease-in-out infinite alternate;
 }
 
+.home-page .home-atmosphere.has-live-atmosphere { animation: none; }
+.home-page .home-atmosphere canvas { display: block; width: 100%; height: 100%; }
+.home-page .home-atmosphere canvas[hidden] { display: none; }
+
 @keyframes atmosphere-drift {
   from { transform: translate3d(-1%, 0, 0) scale(1.04); }
   to { transform: translate3d(1%, -1%, 0) scale(1.11); }

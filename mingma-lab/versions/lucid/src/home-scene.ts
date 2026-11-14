@@ -10,6 +10,7 @@ export function mountHomeScene(root: HTMLElement, onPlanning: (keyboard: boolean
   const events = new AbortController()
   const { signal } = events
   let builder: HomeBuilder | undefined
+  let atmosphere: ReturnType<typeof import('./home-atmosphere').createHomeAtmosphere> | undefined
   let visible = true
   let disposed = false
   let loading = false
@@ -19,6 +20,7 @@ export function mountHomeScene(root: HTMLElement, onPlanning: (keyboard: boolean
   async function enterPlanning(keyboard: boolean) {
     if (entering || disposed) return
     entering = true
+    atmosphere?.setVisible(false)
     previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     menu.open = false
@@ -65,6 +67,14 @@ export function mountHomeScene(root: HTMLElement, onPlanning: (keyboard: boolean
       builder = createHomeBuilder(host, update, reducedMotion.matches)
       builder.setVisible(visible)
       builder.setStructure(scene.dataset.scene === 'structure')
+      try {
+        const { createHomeAtmosphere } = await import('./home-atmosphere')
+        if (disposed) return
+        atmosphere = createHomeAtmosphere(root.querySelector<HTMLElement>('.home-atmosphere')!, reducedMotion.matches)
+        atmosphere.setVisible(visible && !entering)
+      } catch {
+        // Keep the existing CSS background when the optional flow renderer is unavailable.
+      }
     } catch {
       if (disposed) return
       host.dataset.renderer = 'fallback'
@@ -126,7 +136,10 @@ export function mountHomeScene(root: HTMLElement, onPlanning: (keyboard: boolean
     },
     { signal },
   )
-  reducedMotion.addEventListener('change', () => builder?.setReducedMotion(reducedMotion.matches), {
+  reducedMotion.addEventListener('change', () => {
+    builder?.setReducedMotion(reducedMotion.matches)
+    atmosphere?.setReducedMotion(reducedMotion.matches)
+  }, {
     signal,
   })
 
@@ -134,6 +147,7 @@ export function mountHomeScene(root: HTMLElement, onPlanning: (keyboard: boolean
     visible = entry.isIntersecting
     scene.dataset.visible = String(visible)
     builder?.setVisible(visible)
+    atmosphere?.setVisible(visible && !entering)
   })
   observer.observe(scene)
   void loadBuilder()
@@ -143,5 +157,6 @@ export function mountHomeScene(root: HTMLElement, onPlanning: (keyboard: boolean
     events.abort()
     observer.disconnect()
     builder?.dispose()
+    atmosphere?.dispose()
   }
 }
